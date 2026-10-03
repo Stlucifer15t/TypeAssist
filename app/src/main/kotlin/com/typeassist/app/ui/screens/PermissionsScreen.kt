@@ -35,6 +35,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.typeassist.app.utils.XiaomiUtils
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,6 +97,7 @@ fun PermissionsScreen(
     val recommendedGranted = isNotificationsEnabled && !isBatteryOptimized && (!isXiaomi || isXiaomiBgStartEnabled)
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             if (isStandalone) {
                 TopAppBar(
@@ -115,22 +117,13 @@ fun PermissionsScreen(
                 .padding(padding)
                 .padding(24.dp)
         ) {
-            if (!isStandalone) {
-                Text(
-                    text = "Permissions",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        Text(
-            text = "TypeAssist works best with these permissions.",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+            PageHeading(
+                eyebrow = if (isStandalone) "SERVICE HEALTH" else "FIRST-TIME SETUP",
+                title = if (isStandalone) "Keep it running" else "Enable TypeAssist",
+                description = "Accessibility is required. Notifications and battery settings help Android keep the service active."
+            )
         
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         Column(
             modifier = Modifier

@@ -1,6 +1,5 @@
 package com.typeassist.app.ui.screens
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -31,7 +30,7 @@ import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.utils.BackupManager
 import kotlinx.coroutines.launch
-import java.io.InputStream
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,6 +105,7 @@ fun JsonScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () -> Uni
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = { 
             TopAppBar(
                 title = { Text("Backup & Restore") }, 
@@ -120,6 +120,12 @@ fun JsonScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () -> Uni
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+            PageHeading(
+                title = "Your data, in your hands",
+                description = "Export and restore your settings, API profiles, commands, and snippets.",
+                eyebrow = "BACKUP & RESTORE"
+            )
+            Spacer(Modifier.height(18.dp))
             // --- Actions Section ---
             Text("Data Management", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(16.dp))

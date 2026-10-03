@@ -14,6 +14,7 @@ data class AppConfig(
     var savedCustomConfigs: MutableList<CustomApiConfig> = mutableListOf(),
     var savedGeminiConfigs: MutableList<SavedGeminiConfig> = mutableListOf(),
     var savedCloudflareConfigs: MutableList<CloudflareConfig> = mutableListOf(),
+    var modelPreferences: MutableList<ModelSelectionPreference> = mutableListOf(),
     var triggerDebounceMs: Long = 400L,
     var generationConfig: GenConfig = GenConfig(),
     var triggers: MutableList<Trigger> = mutableListOf(),
@@ -102,6 +103,7 @@ fun createDefaultConfig(): AppConfig {
         savedCustomConfigs = mutableListOf(),
         savedGeminiConfigs = mutableListOf(),
         savedCloudflareConfigs = mutableListOf(),
+        modelPreferences = mutableListOf(),
         triggerDebounceMs = 400L,
         generationConfig = GenConfig(temperature = 0.2, topP = 0.95),
         triggers = mutableListOf(

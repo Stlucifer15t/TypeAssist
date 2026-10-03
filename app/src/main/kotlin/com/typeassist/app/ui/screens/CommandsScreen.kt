@@ -1,6 +1,5 @@
 package com.typeassist.app.ui.screens
 
-import android.app.Activity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,19 +13,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.InlineCommand
 import com.typeassist.app.data.Trigger
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +48,7 @@ fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
     val primaryColor = MaterialTheme.colorScheme.primary
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = { 
             TopAppBar(
                 title = { Text("Commands") }, 
@@ -92,7 +90,15 @@ fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                 Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Inline") })
             }
 
-            LazyColumn(modifier = Modifier.padding(16.dp)) {
+            LazyColumn(modifier = Modifier.padding(horizontal = 20.dp)) {
+                item {
+                    PageHeading(
+                        eyebrow = "PERSONALIZE",
+                        title = "Your commands",
+                        description = "Shape your own AI shortcuts and inline actions."
+                    )
+                    Spacer(Modifier.height(18.dp))
+                }
                 if (showTip) {
                     item {
                         Card(

@@ -1,6 +1,5 @@
 package com.typeassist.app.ui.screens
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -15,18 +14,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import com.typeassist.app.data.HistoryManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +37,7 @@ fun HistoryScreen(onBack: () -> Unit) {
     // For simplicity, we refresh on load. The user can go back and forth to refresh.
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = { 
             TopAppBar(
                 title = { Text("History (Last 5 Min)") }, 
@@ -58,11 +56,25 @@ fun HistoryScreen(onBack: () -> Unit) {
         }
     ) { p ->
         if (historyItems.isEmpty()) {
-            Box(modifier = Modifier.padding(p).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No history available.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Box(modifier = Modifier.padding(p).fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Nothing here yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Processed text from the last five minutes will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         } else {
-            LazyColumn(modifier = Modifier.padding(p).padding(16.dp)) {
+            LazyColumn(modifier = Modifier.padding(p).padding(horizontal = 20.dp)) {
+                item {
+                    PageHeading(
+                        title = "Recent changes",
+                        description = "Recover or copy text processed in the last five minutes.",
+                        eyebrow = "HISTORY"
+                    )
+                    Spacer(Modifier.height(16.dp))
+                }
                 items(historyItems) { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),

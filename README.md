@@ -34,6 +34,8 @@ TypeAssist uses Accessibility to trigger AI actions via simple commands, with su
 
 ### 🤖 AI Capabilities
 *   **Ask AI:** Query Google Gemini, Cloudflare Workers AI, or **any OpenAI-compatible Custom API** directly from any app.
+*   **Live Model Picker:** Load models available to your Gemini key or OpenAI-compatible endpoint, then search, select, favorite, and revisit recent models. Manual model IDs remain supported for providers without a model-list endpoint.
+*   **Provider Diagnostics:** Test a setup with clearer guidance for common key, URL, model, quota, and network errors.
 *   **Grammar Fix:** Instantly correct spelling, punctuation, and grammar errors.
 *   **Translation:** Translate text from any language to English (or your preferred language).
 *   **Tone Adjustment:** Rewrite messages to be more professional, polite, or friendly.
