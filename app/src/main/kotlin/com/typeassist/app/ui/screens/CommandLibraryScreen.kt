@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.typeassist.app.data.*
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +26,7 @@ fun CommandLibraryScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack:
     var selectedTemplate by remember { mutableStateOf<CommandTemplate?>(null) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Command Gallery") },
@@ -49,18 +50,12 @@ fun CommandLibraryScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack:
                 .padding(16.dp)
         ) {
             item {
-                Text(
-                    "Discover Pro Commands",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                PageHeading(
+                    title = "Command gallery",
+                    description = "Add a ready-made shortcut, then customize it whenever you like.",
+                    eyebrow = "GET INSPIRED"
                 )
-                Text(
-                    "Tap '+' to add a command to your collection.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                Spacer(Modifier.height(18.dp))
             }
 
             items(CommandLibrary.templates) { template ->

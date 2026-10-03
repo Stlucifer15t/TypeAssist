@@ -1,31 +1,23 @@
 package com.typeassist.app.ui.screens
 
-import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +26,7 @@ fun GuideScreen(onBack: () -> Unit) {
     val primaryColor = MaterialTheme.colorScheme.primary
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("User Guide") },
@@ -44,18 +37,12 @@ fun GuideScreen(onBack: () -> Unit) {
     ) { p ->
         LazyColumn(modifier = Modifier.padding(p).padding(16.dp)) {
             item {
-                Text(
-                    "Welcome to TypeAssist!",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                PageHeading(
+                    title = "The quick guide",
+                    description = "Learn the shortcuts and tools that work in your text fields.",
+                    eyebrow = "HOW IT WORKS"
                 )
-                Text(
-                    "Master your new AI keyboard assistant.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
+                Spacer(Modifier.height(18.dp))
             }
 
             item { GuideSection("1. Basic AI Triggers", "Standard commands that work at the end of your text.", 

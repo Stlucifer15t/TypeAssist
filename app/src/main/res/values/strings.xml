@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">TypeAssist</string>
-    <string name="app_name_service">TypeAssist AI</string>
+    <string name="app_name">Prompt AI</string>
+    <string name="app_name_service">Prompt AI Accessibility Service</string>
 </resources>

@@ -1,6 +1,5 @@
 package com.typeassist.app.ui.screens
 
-import android.app.Activity
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,15 +18,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.Snippet
+import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +57,7 @@ fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
     val primaryColor = MaterialTheme.colorScheme.primary
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = { 
             TopAppBar(
                 title = { Text("Snippets") }, 
@@ -93,6 +91,12 @@ fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
         }
     ) { p ->
         Column(modifier = Modifier.padding(p)) {
+            PageHeading(
+                title = "Your snippets",
+                description = "Store the text you reuse and expand it with a short trigger.",
+                eyebrow = "TEXT EXPANDER",
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+            )
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 modifier = Modifier.fillMaxWidth().padding(16.dp)

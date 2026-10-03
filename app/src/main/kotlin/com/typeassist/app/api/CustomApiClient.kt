@@ -61,10 +61,11 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         // Standard OpenAI SDK behavior: baseURL + "/chat/completions"
         
         val cleanBaseUrl = baseUrl.trim().removeSuffix("/")
-        val url = if (cleanBaseUrl.endsWith("/chat/completions")) {
-            cleanBaseUrl
-        } else {
-            "$cleanBaseUrl/chat/completions"
+        val normalizedBaseUrl = cleanBaseUrl.removeSuffix("/models")
+        val url = when {
+            cleanBaseUrl.endsWith("/chat/completions") -> cleanBaseUrl
+            cleanBaseUrl.endsWith("/models") -> "$normalizedBaseUrl/chat/completions"
+            else -> "$cleanBaseUrl/chat/completions"
         }
 
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())

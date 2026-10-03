@@ -1,15 +1,15 @@
 package com.typeassist.app.ui
 
 import android.content.Context
-import android.content.Intent
-import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -18,7 +18,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.google.gson.GsonBuilder
-import com.typeassist.app.MainActivity
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.createDefaultConfig
 import com.typeassist.app.data.model.GitHubRelease
@@ -43,9 +42,16 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
             if (json != null) {
                 val loadedConfig = gson.fromJson(json, AppConfig::class.java)
                 // Handle missing fields from older versions
-                if (loadedConfig.savedCustomConfigs == null) {
-                    loadedConfig.savedCustomConfigs = mutableListOf()
-                }
+                if (loadedConfig.savedCustomConfigs == null) loadedConfig.savedCustomConfigs = mutableListOf()
+                if (loadedConfig.savedGeminiConfigs == null) loadedConfig.savedGeminiConfigs = mutableListOf()
+                if (loadedConfig.savedCloudflareConfigs == null) loadedConfig.savedCloudflareConfigs = mutableListOf()
+                if (loadedConfig.savedLocalModels == null) loadedConfig.savedLocalModels = mutableListOf()
+                if (loadedConfig.modelPreferences == null) loadedConfig.modelPreferences = mutableListOf()
+                if (loadedConfig.triggers == null) loadedConfig.triggers = createDefaultConfig().triggers
+                if (loadedConfig.inlineCommands == null) loadedConfig.inlineCommands = createDefaultConfig().inlineCommands
+                if (loadedConfig.customApiConfig == null) loadedConfig.customApiConfig = com.typeassist.app.data.CustomApiConfig()
+                if (loadedConfig.cloudflareConfig == null) loadedConfig.cloudflareConfig = com.typeassist.app.data.CloudflareConfig()
+                if (loadedConfig.localLlmConfig == null) loadedConfig.localLlmConfig = com.typeassist.app.data.LocalLlmConfig()
                 if (loadedConfig.snippets == null) {
                     loadedConfig.snippets = mutableListOf()
                 }
@@ -88,18 +94,14 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
             targetState = currentScreen,
             label = "Screen Animation",
             transitionSpec = {
-                // Logic to determine if it's a "back" animation
                 val isBackTransition = (targetState == "home" && previousScreen != "home") ||
-                                       (targetState == "commands" && previousScreen == "library") ||
-                                       (targetState == "settings" && previousScreen == "permissions")
-                
-                if (isBackTransition) {
-                    slideInHorizontally { fullWidth -> -fullWidth } togetherWith // New screen from left
-                    slideOutHorizontally { fullWidth -> fullWidth } // Old screen to right
-                } else { // Navigating forward
-                    slideInHorizontally { fullWidth -> fullWidth } togetherWith // New screen from right
-                    slideOutHorizontally { fullWidth -> -fullWidth } // Old screen to left
-                }
+                    (targetState == "commands" && previousScreen == "library") ||
+                    (targetState == "settings" && previousScreen == "permissions")
+                val direction = if (isBackTransition) -1 else 1
+                (fadeIn(animationSpec = tween(150)) +
+                    slideInHorizontally(animationSpec = tween(180)) { width -> direction * width / 24 }) togetherWith
+                    (fadeOut(animationSpec = tween(120)) +
+                        slideOutHorizontally(animationSpec = tween(150)) { width -> -direction * width / 24 })
             }
         ) { screen ->
             val route = screen.substringBefore(":")
