@@ -199,6 +199,7 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GeneralSettingsTabModern(
     config: AppConfig,
@@ -1258,7 +1259,7 @@ private fun LoadingStylePreview(styleId: String) {
                         modifier = Modifier
                             .width(6.dp)
                             .height(18.dp)
-                            .scale(scaleY = scale)
+                            .scale(scaleX = 1f, scaleY = scale)
                             .clip(RoundedCornerShape(3.dp))
                             .background(white)
                     )
