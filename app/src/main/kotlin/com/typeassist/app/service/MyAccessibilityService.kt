@@ -82,10 +82,10 @@ class MyAccessibilityService : AccessibilityService() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     "typeassist_service",
-                    "TypeAssist Service",
+                    "Prompt AI",
                     NotificationManager.IMPORTANCE_LOW
                 ).apply {
-                    description = "Keeps TypeAssist running in the background"
+                    description = "Keeps Prompt AI ready in the background"
                     setShowBadge(false)
                 }
                 val manager = getSystemService(NotificationManager::class.java)
@@ -98,7 +98,7 @@ class MyAccessibilityService : AccessibilityService() {
             val largeIcon = android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher)
 
             val notification = NotificationCompat.Builder(this, "typeassist_service")
-                .setContentTitle("TypeAssist is Active")
+                .setContentTitle("Prompt AI is active")
                 .setContentText("Ready to assist with your typing.")
                 .setSmallIcon(R.drawable.ic_notification_monochrome) 
                 .setLargeIcon(largeIcon)

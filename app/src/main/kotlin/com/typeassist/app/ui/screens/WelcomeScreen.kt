@@ -100,7 +100,7 @@ fun WelcomeContent(onNext: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "TypeAssist",
+                text = "Prompt AI",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

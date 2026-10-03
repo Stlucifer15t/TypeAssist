@@ -208,7 +208,7 @@ fun LocalLlmSetup(config: AppConfig, onSave: (AppConfig) -> Unit) {
                     )
                     Text(
                         "This model outputs internal thinking (\u003cthink\u003e...\u003c/think\u003e). " +
-                        "TypeAssist automatically strips it from the final output.",
+                        "Prompt AI automatically removes it from the final output.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                         lineHeight = 14.sp

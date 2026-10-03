@@ -38,7 +38,7 @@ fun DeveloperCreditSection() {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "TypeAssist is an open-source project by Istiak Ahmmed Soyeb.",
+            "Prompt AI is an open-source writing assistant.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )
@@ -80,7 +80,7 @@ fun DonationSection() {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "TypeAssist is free and open source. If it helps you, you can support its continued development.",
+            "Prompt AI is free and open source. If it helps you, you can support its continued development.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall
         )

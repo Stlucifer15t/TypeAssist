@@ -34,7 +34,7 @@ object BackupManager {
 
     fun generateFileName(): String {
         val sdf = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.getDefault())
-        return "TypeAssist_${sdf.format(Date())}.tabak"
+        return "PromptAI_${sdf.format(Date())}.tabak"
     }
 
     /**
@@ -95,7 +95,7 @@ object BackupManager {
         if (bytes.size < 5) throw IllegalArgumentException("Invalid file format")
         
         val header = String(bytes.copyOfRange(0, 5), StandardCharsets.UTF_8)
-        if (header != MAGIC_HEADER) throw IllegalArgumentException("Not a TypeAssist backup file")
+        if (header != MAGIC_HEADER) throw IllegalArgumentException("Not a Prompt AI backup file")
         
         val version = bytes[5] // currently unused, for future compat
         val flag = bytes[6]

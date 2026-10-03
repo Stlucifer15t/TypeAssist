@@ -199,7 +199,7 @@ class OverlayManager(private val context: Context) {
                 }
 
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText("TypeAssist AI Response", textToCopy)
+                val clip = android.content.ClipData.newPlainText("Prompt AI response", textToCopy)
                 clipboard.setPrimaryClip(clip)
                 
                 if (min >= 0 && max > min) {

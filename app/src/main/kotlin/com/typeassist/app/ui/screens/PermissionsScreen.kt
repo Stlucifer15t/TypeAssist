@@ -119,7 +119,7 @@ fun PermissionsScreen(
         ) {
             PageHeading(
                 eyebrow = if (isStandalone) "SERVICE HEALTH" else "FIRST-TIME SETUP",
-                title = if (isStandalone) "Keep it running" else "Enable TypeAssist",
+                title = if (isStandalone) "Keep it running" else "Enable Prompt AI",
                 description = "Accessibility is required. Notifications and battery settings help Android keep the service active."
             )
         
@@ -224,7 +224,7 @@ fun PermissionsScreen(
         AlertDialog(
             onDismissRequest = { showSkipDialog = false },
             title = { Text("Skip Stability Settings?") },
-            text = { Text("Without these permissions, TypeAssist may stop working unexpectedly.\n\nIf the app doesn't work then you have to grant permission.") },
+            text = { Text("Without these permissions, Prompt AI may stop working unexpectedly.\n\nIf the app does not work, grant the requested permission.") },
             confirmButton = {
                 Button(
                     onClick = {

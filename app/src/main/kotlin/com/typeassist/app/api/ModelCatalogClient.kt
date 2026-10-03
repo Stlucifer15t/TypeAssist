@@ -49,7 +49,7 @@ class ModelCatalogClient(private val client: OkHttpClient) {
                     val models = try {
                         parse(body)
                     } catch (e: Exception) {
-                        throw IOException("The provider returned a model-list response TypeAssist could not read.", e)
+                        throw IOException("The provider returned a model-list response Prompt AI could not read.", e)
                     }
                     if (models.isEmpty()) {
                         throw IOException("The provider returned no chat-capable models. You can still enter a model ID manually.")

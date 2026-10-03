@@ -200,7 +200,7 @@ private fun GeneralSettingsTabModern(
 
     ModernSettingsSection(
         title = "Floating controls",
-        description = "Choose which helpful indicators appear while TypeAssist works."
+        description = "Choose which helpful indicators appear while Prompt AI works."
     ) {
         ModernSwitchRow(
             title = "Undo button",
@@ -257,7 +257,7 @@ private fun GeneralSettingsTabModern(
 
     ModernSettingsSection(
         title = "History & preview",
-        description = "Control what TypeAssist keeps and how longer answers are shown."
+        description = "Control what Prompt AI keeps and how longer answers are shown."
     ) {
         ModernSwitchRow(
             title = "Save processed text to history",
@@ -294,7 +294,7 @@ private fun GeneralSettingsTabModern(
 
     ModernSettingsSection(
         title = "Troubleshooting",
-        description = "Check the Android permissions TypeAssist needs to run reliably."
+        description = "Check the Android permissions Prompt AI needs to run reliably."
     ) {
         ModernActionRow(
             title = "Check permissions",
@@ -551,7 +551,7 @@ private fun AiProviderSettingsTabModern(config: AppConfig, client: OkHttpClient,
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         ModernSettingsSection(
             title = "Choose a provider",
-            description = "Select the service TypeAssist will use for AI commands."
+            description = "Select the service Prompt AI will use for AI commands."
         ) {
             var providerMenuExpanded by remember { mutableStateOf(false) }
             val providerNames = listOf("gemini" to "Google Gemini", "cloudflare" to "Cloudflare Workers AI", "custom" to "OpenAI-compatible API", "local" to "Local LLM")

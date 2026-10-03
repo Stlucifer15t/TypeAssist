@@ -94,7 +94,7 @@ fun HomeScreen(
             onDismissRequest = { showTroubleshootDialog = false },
             title = { Text("Service needs a refresh?") },
             text = {
-                Text("Android can occasionally pause an accessibility service. Turn TypeAssist off and on again in Accessibility settings if commands stop responding.")
+                Text("Android can occasionally pause an accessibility service. Turn Prompt AI off and on again in Accessibility settings if commands stop responding.")
             },
             confirmButton = {
                 Button(onClick = {
@@ -163,7 +163,7 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("TYPEASSIST", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+                        Text("PROMPT AI", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
                         Text("Write with confidence.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     }
                     IconButton(onClick = { onNavigate("settings") }) {
@@ -182,7 +182,7 @@ fun HomeScreen(
                         if (!newState) {
                             onToggle(false)
                         } else if (!activity.isAccessibilityEnabled()) {
-                            Toast.makeText(context, "Enable TypeAssist Accessibility Service first.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Enable Prompt AI Accessibility Service first.", Toast.LENGTH_SHORT).show()
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         } else {
                             val isLocalReady = config.provider == "local" && config.localLlmConfig.modelPath.isNotBlank()
@@ -220,7 +220,7 @@ fun HomeScreen(
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
                             Column(Modifier.weight(1f)) {
                                 Text("One step left", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                                Text("Enable Accessibility to let TypeAssist act in text fields.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                                Text("Enable Accessibility to let Prompt AI act in text fields.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
                             }
                             Text("Fix", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
                         }
@@ -244,7 +244,7 @@ fun HomeScreen(
                         ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                             Column(Modifier.weight(1f)) {
-                                Text("TypeAssist ${updateInfo.tagName} is ready", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text("Prompt AI ${updateInfo.tagName} is ready", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                 Text("Tap to read what’s new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
                         }
@@ -331,7 +331,7 @@ fun HomeScreen(
                         Text("Get started", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text("Type a message in any text field, add a shortcut, and let TypeAssist handle the change.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Type a message in any text field, add a shortcut, and let Prompt AI handle the change.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(14.dp))
                     Text("TRY A COMMAND", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(7.dp))
@@ -360,7 +360,7 @@ fun HomeScreen(
                         Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                         Column(Modifier.weight(1f)) {
                             Text("Discover a hidden feature", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                            Text("Tips and examples for getting more from TypeAssist.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                            Text("Tips and examples for getting more from Prompt AI.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
                         }
                         Text("Open", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
                     }
@@ -371,7 +371,7 @@ fun HomeScreen(
             item { DeveloperCreditSection() }
             item {
                 Text(
-                    "TypeAssist ${BuildConfig.VERSION_NAME}",
+                    "Prompt AI ${BuildConfig.VERSION_NAME}",
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -403,7 +403,7 @@ private fun ServiceHeroCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("TYPEASSIST SERVICE", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Text("PROMPT AI SERVICE", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
                 Spacer(Modifier.height(5.dp))
                 Text("Ready when you type.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
             }
