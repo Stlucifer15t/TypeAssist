@@ -91,8 +91,9 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
                 response.use {
                     if (!it.isSuccessful) {
                         val errorBody = it.body?.string()
-                        val errorCode = it.code
-                        val errorMessage = "$errorCode: $errorBody"
+                        // Turn the provider's JSON error into something readable
+                        // (e.g. "401: Incorrect API key provided (check your API key)")
+                        val errorMessage = readableHttpError(it.code, errorBody)
                         callback(Result.failure(IOException(errorMessage)))
                         return
                     }

@@ -1,0 +1,52 @@
+name: CI Debug (temporary)
+
+# TEMPORARY: surfaces Kotlin compiler errors as GitHub annotations so they can be
+# read through the API. Removed again once the build is green.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  kotlin-compile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Setup Android NDK
+        run: |
+          echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973"
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: 17
+          cache: 'gradle'
+
+      - name: Compile Kotlin (no native build)
+        run: |
+          chmod +x ./gradlew
+          set +e
+          ./gradlew :app:compileFullDebugKotlin --console=plain --no-daemon > gradle.log 2>&1
+          status=$?
+          tail -80 gradle.log
+          if [ $status -ne 0 ]; then
+            grep -E "^e: |error:|Execution failed|FAILURE:|Caused by:|What went wrong|Could not|Unresolved" gradle.log | head -40 | while IFS= read -r line; do
+              echo "::error title=Gradle::$line"
+            done
+            echo "::error title=ExitCode::gradle exited with $status"
+            exit $status
+          fi
+
+      - name: Upload gradle log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log
+          path: gradle.log
+          if-no-files-found: ignore
