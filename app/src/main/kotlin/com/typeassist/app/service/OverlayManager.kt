@@ -25,7 +25,6 @@ class OverlayManager(private val context: Context) {
 
     private var windowManager: WindowManager? = null
     
-    // --- UI Elements ---
     private var loadingView: View? = null
     private var undoView: FrameLayout? = null
     private var previewView: FrameLayout? = null 
@@ -35,7 +34,6 @@ class OverlayManager(private val context: Context) {
     private val hideUndoRunnable = Runnable { hideUndoButton() }
     private val hidePreviewRunnable = Runnable { hidePreviewDialog() }
     
-    // Callbacks
     var onUndoAction: (() -> Unit)? = null
     var onOverlayShown: (() -> Unit)? = null
     var onOverlayHidden: (() -> Unit)? = null
@@ -46,8 +44,6 @@ class OverlayManager(private val context: Context) {
 
     private fun dp(v: Int): Int = (v * context.resources.displayMetrics.density).toInt()
     private fun dpF(v: Float): Float = v * context.resources.displayMetrics.density
-
-    // ===================== LOADING INDICATOR STYLES =====================
 
     fun showLoading(config: AppConfig) {
         if (!config.enableLoadingOverlay) return
@@ -144,7 +140,6 @@ class OverlayManager(private val context: Context) {
                 start()
             }
             loadingAnimators.add(anim)
-            // also subtle scale
             val scaleX = ObjectAnimator.ofFloat(dot, View.SCALE_X, 0.7f, 1.15f).apply {
                 duration = 600
                 startDelay = (index * 180L)
@@ -296,7 +291,7 @@ class OverlayManager(private val context: Context) {
             indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF818CF8.toInt())
         }
         val text = TextView(context).apply {
-            this.text = \"AI thinking…\"
+            this.text = "AI thinking..."
             textSize = 13f
             setTextColor(Color.WHITE)
             setTypeface(null, android.graphics.Typeface.BOLD)
@@ -317,7 +312,6 @@ class OverlayManager(private val context: Context) {
             isIndeterminate = true
             indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF818CF8.toInt())
         }
-        // inner dot
         val dot = View(context).apply {
             layoutParams = FrameLayout.LayoutParams(dp(10), dp(10), Gravity.CENTER)
             background = circleDrawable(Color.WHITE)
@@ -335,15 +329,13 @@ class OverlayManager(private val context: Context) {
         return container
     }
 
-    // ===================== UNDO / PREVIEW / SNIPPETS (unchanged) =====================
-
     fun showUndoButton(config: AppConfig) {
         if (!config.enableUndoOverlay) return
         mainHandler.post {
             if (undoView != null) return@post
             undoView = FrameLayout(context)
             val btn = Button(context).apply {
-                text = \"UNDO\"
+                text = "UNDO"
                 textSize = 14f
                 setTextColor(Color.WHITE)
                 background = GradientDrawable().apply { setColor(0xEE333333.toInt()); cornerRadius = 50f; setStroke(2, Color.WHITE) }
@@ -386,14 +378,12 @@ class OverlayManager(private val context: Context) {
         mainHandler.post {
             removePreviewInternal()
             
-            // Material 3 Colors from Theme.kt
-            val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt() // Surface
-            val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt() // Primary
-            val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt() // OnSurface
-            val discardTextColor = if (isDarkMode) 0xFFCAC4D0.toInt() else 0xFF49454F.toInt() // OnSurfaceVariant
-            val insertTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt() // Primary
+            val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
+            val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
+            val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
+            val discardTextColor = if (isDarkMode) 0xFFCAC4D0.toInt() else 0xFF49454F.toInt()
+            val insertTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
 
-            // The Card (As Root View)
             val card = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
                 setPadding(40, 40, 40, 40)
@@ -407,16 +397,16 @@ class OverlayManager(private val context: Context) {
             }
 
             val title = android.widget.TextView(context).apply {
-                this.text = \"Preview Response\"
+                this.text = "Preview Response"
                 textSize = 18f
                 setTextColor(primaryTextColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
-                setPadding(0, 0, 0, 5) // Reduced padding for hint
+                setPadding(0, 0, 0, 5)
             }
             card.addView(title)
 
             val hint = android.widget.TextView(context).apply {
-                this.text = \"Long press and drag to select text portion\"
+                this.text = "Long press and drag to select text portion"
                 textSize = 11f
                 setTextColor(discardTextColor)
                 setTypeface(null, android.graphics.Typeface.ITALIC)
@@ -430,14 +420,13 @@ class OverlayManager(private val context: Context) {
                     0 
                 ).apply { weight = 1f }
             }
-            // Constrain height
             scrollView.layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.35).toInt()
             
             val contentText = android.widget.TextView(context).apply {
                 this.text = text
                 textSize = 14f
                 setTextColor(secondaryTextColor)
-                setTextIsSelectable(true) // Make text selectable
+                setTextIsSelectable(true)
             }
             scrollView.addView(contentText)
             card.addView(scrollView)
@@ -457,13 +446,13 @@ class OverlayManager(private val context: Context) {
                         context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
                         context.resources.getDrawable(tv.resourceId, context.theme)
                     }
-                    setPadding(15, 20, 15, 20) // Reduced padding to fit 3 buttons
+                    setPadding(15, 20, 15, 20)
                     setOnClickListener { onClick() }
                 }
             }
 
-            val discardBtn = createButton(\"Discard\", discardTextColor) { hidePreviewDialog() }
-            val copyBtn = createButton(\"Copy\", primaryTextColor) {
+            val discardBtn = createButton("Discard", discardTextColor) { hidePreviewDialog() }
+            val copyBtn = createButton("Copy", primaryTextColor) {
                 val start = contentText.selectionStart
                 val end = contentText.selectionEnd
                 val min = kotlin.math.min(start, end)
@@ -476,16 +465,16 @@ class OverlayManager(private val context: Context) {
                 }
 
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                val clip = android.content.ClipData.newPlainText(\"Prompt AI response\", textToCopy)
+                val clip = android.content.ClipData.newPlainText("Prompt AI response", textToCopy)
                 clipboard.setPrimaryClip(clip)
                 
                 if (min >= 0 && max > min) {
-                    showToast(\"Copied selection\")
+                    showToast("Copied selection")
                 } else {
-                    showToast(\"Copied full text\")
+                    showToast("Copied full text")
                 }
             }
-            val insertBtn = createButton(\"Insert\", insertTextColor) { 
+            val insertBtn = createButton("Insert", insertTextColor) { 
                 onInsert()
                 hidePreviewDialog() 
             }
@@ -511,7 +500,6 @@ class OverlayManager(private val context: Context) {
             
             try { 
                 windowManager?.addView(previewView, rootParams) 
-                // Removed auto-hide to allow reading
             } catch (e: Exception) {}
         }
     }
@@ -524,7 +512,7 @@ class OverlayManager(private val context: Context) {
     private var currentSnippetTrigger: String? = null
 
     fun showSnippetSelection(trigger: String, variations: List<String>, isDarkMode: Boolean, onSelected: (String) -> Unit) {
-        if (currentSnippetTrigger == trigger) return // Already showing this one
+        if (currentSnippetTrigger == trigger) return
         
         currentSnippetTrigger = trigger
         onOverlayShown?.invoke()
@@ -532,7 +520,6 @@ class OverlayManager(private val context: Context) {
         mainHandler.post {
             removeSnippetSelectionInternal()
 
-            // Material 3 Colors from Theme.kt (Sync with showPreviewDialog)
             val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
             val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
             val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
@@ -552,7 +539,7 @@ class OverlayManager(private val context: Context) {
             }
 
             val title = android.widget.TextView(context).apply {
-                text = \"Select Variation: $trigger\"
+                text = "Select Variation: $trigger"
                 textSize = 18f
                 setTextColor(primaryTextColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
@@ -568,7 +555,6 @@ class OverlayManager(private val context: Context) {
                     weight = 1f 
                 }
             }
-            // Constrain height to 35% of screen like preview dialog
             scrollView.layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.35).toInt()
             
             val list = android.widget.LinearLayout(context).apply {
@@ -599,7 +585,6 @@ class OverlayManager(private val context: Context) {
                 }
                 item.addView(content)
                 
-                // Divider
                 val divider = android.view.View(context).apply {
                     layoutParams = android.widget.LinearLayout.LayoutParams(
                         android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 2
@@ -620,7 +605,7 @@ class OverlayManager(private val context: Context) {
             }
 
             val closeBtn = Button(context).apply {
-                text = \"Cancel\"
+                text = "Cancel"
                 setTextColor(primaryTextColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 background = android.util.TypedValue().let { tv ->
