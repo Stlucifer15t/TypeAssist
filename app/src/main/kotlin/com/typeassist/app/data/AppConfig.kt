@@ -29,13 +29,17 @@ data class AppConfig(
     var enablePreviewDialog: Boolean = false,
     var allowTriggerAnywhere: Boolean = false,
     var ignorePrecedingWhitespace: Boolean = false,
-    var apiTimeoutSeconds: Long = 30L
+    var apiTimeoutSeconds: Long = 30L,
+    // Model list read from the Gemini API, cached so the picker also works offline.
+    var cachedGeminiModels: MutableList<String> = defaultGeminiModels()
 ) : Serializable
 
 data class CloudflareConfig(
     var accountId: String = "",
     var apiToken: String = "",
-    var model: String = "@cf/meta/llama-3-8b-instruct"
+    var model: String = "@cf/meta/llama-3-8b-instruct",
+    // Model list read from the Cloudflare API, seeded with popular text models.
+    var cachedModels: MutableList<String> = defaultCloudflareModels()
 ) : Serializable
 
 data class SavedGeminiConfig(
@@ -46,7 +50,9 @@ data class SavedGeminiConfig(
 data class CustomApiConfig(
     var baseUrl: String = "https://api.openai.com/v1",
     var apiKey: String = "",
-    var model: String = "gpt-3.5-turbo"
+    var model: String = "gpt-3.5-turbo",
+    // Model list read from {baseUrl}/models, cached so the picker also works offline.
+    var cachedModels: MutableList<String> = mutableListOf()
 ) : Serializable
 
 data class LocalLlmConfig(
@@ -58,6 +64,32 @@ data class LocalLlmConfig(
     var useGpu: Boolean = false,
     var disableReasoning: Boolean = false
 ) : Serializable
+
+/** Curated Gemini models used until the live list is fetched. */
+fun defaultGeminiModels(): MutableList<String> = mutableListOf(
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-2.5-flash",
+    "gemma-4-31b-it",
+    "gemma-4-26b-a4b-it"
+)
+
+/** Popular Cloudflare Workers AI text models, used as a fallback and as the starter list. */
+fun defaultCloudflareModels(): MutableList<String> = mutableListOf(
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "@cf/meta/llama-3.1-8b-instruct",
+    "@cf/meta/llama-3-8b-instruct",
+    "@cf/meta/llama-3.2-3b-instruct",
+    "@cf/meta/llama-3.2-1b-instruct",
+    "@cf/meta/llama-4-scout-17b-16e-instruct",
+    "@cf/qwen/qwen1.5-14b-chat-awq",
+    "@cf/qwen/qwq-32b",
+    "@cf/mistral/mistral-7b-instruct-v0.1",
+    "@cf/google/gemma-3-12b-it",
+    "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
+    "@cf/microsoft/phi-2"
+)
 
 /** Returns true if the model filename suggests it is a reasoning/thinking model. */
 fun isReasoningModel(modelPath: String): Boolean {

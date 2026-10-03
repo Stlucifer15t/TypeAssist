@@ -3,10 +3,14 @@ package com.typeassist.app.ui.screens
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +45,8 @@ import com.typeassist.app.data.CustomApiConfig
 import com.typeassist.app.data.isReasoningModel
 import com.typeassist.app.api.CloudflareApiClient
 import com.typeassist.app.api.CustomApiClient
+import com.typeassist.app.api.ModelFetcher
+import com.typeassist.app.ui.components.ModelSelector
 import com.typeassist.app.BuildConfig
 import kotlinx.coroutines.launch
 import okhttp3.*
@@ -328,36 +334,127 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
     // Gemini States
     var geminiKey by remember { mutableStateOf(config.apiKey) }
     var geminiModel by remember { mutableStateOf(config.model) }
+    var geminiModels by remember { mutableStateOf(config.cachedGeminiModels ?: mutableListOf()) }
+    var isFetchingGeminiModels by remember { mutableStateOf(false) }
+    var geminiModelsError by remember { mutableStateOf<String?>(null) }
     
     // Cloudflare States
     var cfAccountId by remember { mutableStateOf(config.cloudflareConfig.accountId) }
     var cfApiToken by remember { mutableStateOf(config.cloudflareConfig.apiToken) }
     var cfModel by remember { mutableStateOf(config.cloudflareConfig.model) }
+    var cfModels by remember { mutableStateOf(config.cloudflareConfig.cachedModels ?: mutableListOf()) }
+    var isFetchingCfModels by remember { mutableStateOf(false) }
+    var cfModelsError by remember { mutableStateOf<String?>(null) }
 
     // Custom API States
     var customBaseUrl by remember { mutableStateOf(config.customApiConfig.baseUrl) }
     var customApiKey by remember { mutableStateOf(config.customApiConfig.apiKey) }
     var customModel by remember { mutableStateOf(config.customApiConfig.model) }
+    var customModels by remember { mutableStateOf(config.customApiConfig.cachedModels ?: mutableListOf()) }
+    var isFetchingCustomModels by remember { mutableStateOf(false) }
+    var customModelsError by remember { mutableStateOf<String?>(null) }
 
     var isKeyVisible by remember { mutableStateOf(false) }
     var providerExpanded by remember { mutableStateOf(false) }
-    var modelExpanded by remember { mutableStateOf(false) }
     
     val providers = listOf("gemini", "cloudflare", "custom")
-    val geminiModels = listOf(
-        "gemini-3.5-flash-lite",
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "gemini-2.5-flash",
-        "gemma-4-31b-it",
-        "gemma-4-26b-a4b-it"
-    )
+    val modelFetcher = remember { ModelFetcher(client) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val context = LocalContext.current
+
+    fun toast(message: String, long: Boolean = false) {
+        if (message.isBlank()) return
+        Toast.makeText(context, message, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+    }
+
+    fun onMain(action: () -> Unit) {
+        mainHandler.post(action)
+    }
+
+    // --- Auto model read: ask the provider which models exist and offer them as a list ---
+
+    fun fetchCustomModels() {
+        if (customBaseUrl.isBlank()) {
+            toast("Enter a Base URL first")
+            return
+        }
+        isFetchingCustomModels = true
+        customModelsError = null
+        modelFetcher.fetchOpenAiCompatibleModels(
+            baseUrl = customBaseUrl.trim(),
+            apiKey = customApiKey.trim(),
+            timeoutSeconds = config.apiTimeoutSeconds
+        ) { result ->
+            onMain {
+                isFetchingCustomModels = false
+                result.onSuccess { list ->
+                    customModels = list
+                    // Only the model list is cached here - keys and URLs are saved with the Save button.
+                    onSave(config.copy(customApiConfig = config.customApiConfig.copy(cachedModels = list.toMutableList())))
+                    toast("${list.size} models found ✅")
+                }.onFailure { e ->
+                    customModelsError = e.message ?: "Could not read the model list"
+                    toast(customModelsError ?: "", true)
+                }
+            }
+        }
+    }
+
+    fun fetchGeminiModels() {
+        if (geminiKey.isBlank()) {
+            toast("Add your Gemini API key first")
+            return
+        }
+        isFetchingGeminiModels = true
+        geminiModelsError = null
+        modelFetcher.fetchGeminiModels(
+            apiKey = geminiKey.trim(),
+            timeoutSeconds = config.apiTimeoutSeconds
+        ) { result ->
+            onMain {
+                isFetchingGeminiModels = false
+                result.onSuccess { list ->
+                    geminiModels = list
+                    onSave(config.copy(cachedGeminiModels = list.toMutableList()))
+                    toast("${list.size} Gemini models found ✅")
+                }.onFailure { e ->
+                    geminiModelsError = e.message ?: "Could not read the model list"
+                    toast(geminiModelsError ?: "", true)
+                }
+            }
+        }
+    }
+
+    fun fetchCloudflareModels() {
+        if (cfAccountId.isBlank() || cfApiToken.isBlank()) {
+            toast("Add your Account ID and API token first")
+            return
+        }
+        isFetchingCfModels = true
+        cfModelsError = null
+        modelFetcher.fetchCloudflareModels(
+            accountId = cfAccountId.trim(),
+            apiToken = cfApiToken.trim(),
+            timeoutSeconds = config.apiTimeoutSeconds
+        ) { result ->
+            onMain {
+                isFetchingCfModels = false
+                result.onSuccess { list ->
+                    cfModels = list
+                    onSave(config.copy(cloudflareConfig = config.cloudflareConfig.copy(cachedModels = list.toMutableList())))
+                    toast("${list.size} Cloudflare models found ✅")
+                }.onFailure { e ->
+                    cfModelsError = e.message ?: "Could not read the model list"
+                    toast(cfModelsError ?: "", true)
+                }
+            }
+        }
+    }
 
     fun verifyGemini(k: String) {
         val req = Request.Builder().url("https://generativelanguage.googleapis.com/v1beta/models?key=$k").build()
         client.newCall(req).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { (context as ComponentActivity).runOnUiThread { Toast.makeText(context, "Network Error", Toast.LENGTH_SHORT).show() } }
+            override fun onFailure(call: Call, e: IOException) { (context as ComponentActivity).runOnUiThread { Toast.makeText(context, "Network Error: ${e.message}", Toast.LENGTH_LONG).show() } }
             override fun onResponse(call: Call, response: Response) { response.use { if(it.isSuccessful) (context as ComponentActivity).runOnUiThread { Toast.makeText(context, "Gemini API Verified! ✅", Toast.LENGTH_SHORT).show() } else (context as ComponentActivity).runOnUiThread { Toast.makeText(context, "Invalid Gemini Key ❌", Toast.LENGTH_SHORT).show() } } }
         })
     }
@@ -367,7 +464,7 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
         cloudflareClient.callCloudflare(acc, tok, mod, "You are a helpful assistant.", "hi", config.apiTimeoutSeconds) { result ->
             (context as ComponentActivity).runOnUiThread {
                 result.onSuccess {
-                    Toast.makeText(context, "Cloudflare API Verified! ✅", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Cloudflare Verified! ✅ ($mod)", Toast.LENGTH_SHORT).show()
                 }.onFailure {
                     Toast.makeText(context, "Cloudflare Verification Failed: ${it.message}", Toast.LENGTH_LONG).show()
                 }
@@ -380,7 +477,7 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
         customClient.callCustomApi(baseUrl, apiKey, model, "You are a helpful assistant.", "hi", config.apiTimeoutSeconds) { result ->
             (context as ComponentActivity).runOnUiThread {
                 result.onSuccess {
-                    Toast.makeText(context, "Custom API Verified! ✅", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Custom API Verified! ✅ ($model)", Toast.LENGTH_SHORT).show()
                 }.onFailure {
                     Toast.makeText(context, "Custom API Verification Failed: ${it.message}", Toast.LENGTH_LONG).show()
                 }
@@ -443,23 +540,24 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
 
         OutlinedTextField(value = geminiKey, onValueChange = { geminiKey = it }, label = { Text("Gemini API Key") }, modifier = Modifier.fillMaxWidth(), visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { IconButton(onClick = { isKeyVisible = !isKeyVisible }) { Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null) } })
         Spacer(Modifier.height(16.dp))
-        ExposedDropdownMenuBox(expanded = modelExpanded, onExpandedChange = { modelExpanded = !modelExpanded }, modifier = Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = geminiModel,
-                onValueChange = { geminiModel = it },
-                readOnly = false,
-                label = { Text("Gemini Model Name") },
-                placeholder = { Text("e.g. gemini-2.5-flash") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded) },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                modifier = Modifier.menuAnchor().fillMaxWidth()
-            )
-            ExposedDropdownMenu(expanded = modelExpanded, onDismissRequest = { modelExpanded = false }) {
-                geminiModels.forEach { item ->
-                    DropdownMenuItem(text = { Text(text = item) }, onClick = { geminiModel = item; modelExpanded = false })
-                }
+        ModelSelector(
+            label = "Gemini Model Name",
+            value = geminiModel,
+            onValueChange = { geminiModel = it },
+            models = geminiModels,
+            isFetching = isFetchingGeminiModels,
+            errorMessage = geminiModelsError,
+            canFetch = geminiKey.isNotBlank(),
+            helperText = "Tap Fetch Models to read the live list from Google.",
+            placeholder = "e.g. gemini-2.5-flash",
+            pickerTitle = "Select Gemini Model",
+            onFetch = { fetchGeminiModels() },
+            onModelPicked = { picked ->
+                // Picking from the list applies the key + model right away.
+                onSave(config.copy(provider = "gemini", apiKey = geminiKey.trim(), model = picked, cachedGeminiModels = geminiModels.toMutableList()))
+                toast("Gemini model set to $picked")
             }
-        }
+        )
     } else if (selectedProvider == "cloudflare") {
         // Cloudflare Setup
         if (config.savedCloudflareConfigs.isNotEmpty()) {
@@ -504,7 +602,23 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(value = cfApiToken, onValueChange = { cfApiToken = it }, label = { Text("Cloudflare API Token") }, modifier = Modifier.fillMaxWidth(), visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { IconButton(onClick = { isKeyVisible = !isKeyVisible }) { Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null) } })
         Spacer(Modifier.height(16.dp))
-        OutlinedTextField(value = cfModel, onValueChange = { cfModel = it }, label = { Text("Cloudflare Model ID") }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("@cf/meta/llama-3-8b-instruct") })
+        ModelSelector(
+            label = "Cloudflare Model ID",
+            value = cfModel,
+            onValueChange = { cfModel = it },
+            models = cfModels,
+            isFetching = isFetchingCfModels,
+            errorMessage = cfModelsError,
+            canFetch = cfAccountId.isNotBlank() && cfApiToken.isNotBlank(),
+            helperText = "Popular text models are listed already. Fetch to read your account's full list.",
+            placeholder = "@cf/meta/llama-3-8b-instruct",
+            pickerTitle = "Select Cloudflare Model",
+            onFetch = { fetchCloudflareModels() },
+            onModelPicked = { picked ->
+                onSave(config.copy(provider = "cloudflare", cloudflareConfig = config.cloudflareConfig.copy(accountId = cfAccountId.trim(), apiToken = cfApiToken.trim(), model = picked, cachedModels = cfModels.toMutableList())))
+                toast("Cloudflare model set to $picked")
+            }
+        )
     } else if (selectedProvider == "custom") {
         // Custom API Setup
         if (config.savedCustomConfigs.isNotEmpty()) {
@@ -546,10 +660,43 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
         }
 
         OutlinedTextField(value = customBaseUrl, onValueChange = { customBaseUrl = it }, label = { Text("Base URL") }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("https://api.openai.com/v1") })
+        Spacer(Modifier.height(8.dp))
+        Text("Quick setup (fills the Base URL)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            items(apiPresets) { preset ->
+                FilterChip(
+                    selected = customBaseUrl.trim().trimEnd('/').equals(preset.baseUrl, ignoreCase = true),
+                    onClick = {
+                        customBaseUrl = preset.baseUrl
+                        // Read the model list for the chosen provider right away when a key is present.
+                        if (customApiKey.isNotBlank()) fetchCustomModels()
+                    },
+                    label = { Text(preset.label, fontSize = 12.sp) }
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(value = customApiKey, onValueChange = { customApiKey = it }, label = { Text("API Key (Optional)") }, modifier = Modifier.fillMaxWidth(), visualTransformation = if (isKeyVisible) VisualTransformation.None else PasswordVisualTransformation(), trailingIcon = { IconButton(onClick = { isKeyVisible = !isKeyVisible }) { Icon(if (isKeyVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff, null) } })
         Spacer(Modifier.height(16.dp))
-        OutlinedTextField(value = customModel, onValueChange = { customModel = it }, label = { Text("Model Name") }, modifier = Modifier.fillMaxWidth(), placeholder = { Text("gpt-3.5-turbo") })
+        ModelSelector(
+            label = "Model Name",
+            value = customModel,
+            onValueChange = { customModel = it },
+            models = customModels,
+            isFetching = isFetchingCustomModels,
+            errorMessage = customModelsError,
+            canFetch = customBaseUrl.isNotBlank(),
+            helperText = "Tap Fetch Models to read the list from your provider (works with any OpenAI compatible API).",
+            placeholder = "gpt-3.5-turbo",
+            pickerTitle = "Select Model",
+            onFetch = { fetchCustomModels() },
+            onModelPicked = { picked ->
+                // Picking from the list applies the URL + key + model right away.
+                onSave(config.copy(provider = "custom", customApiConfig = config.customApiConfig.copy(baseUrl = customBaseUrl.trim(), apiKey = customApiKey.trim(), model = picked, cachedModels = customModels.toMutableList())))
+                toast("Model set to $picked")
+            }
+        )
     } else if (selectedProvider == "local") {
         // Local LLM Saved Models List
         if (config.savedLocalModels.isNotEmpty()) {
@@ -601,7 +748,8 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
             val newCustomConfig = CustomApiConfig(
                 baseUrl = customBaseUrl.trim(),
                 apiKey = customApiKey.trim(),
-                model = customModel.trim()
+                model = customModel.trim(),
+                cachedModels = customModels.toMutableList()
             )
             val newGeminiConfig = com.typeassist.app.data.SavedGeminiConfig(
                 apiKey = geminiKey.trim(),
@@ -610,12 +758,16 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
             val newCloudflareConfig = CloudflareConfig(
                 accountId = cfAccountId.trim(),
                 apiToken = cfApiToken.trim(),
-                model = cfModel.trim()
+                model = cfModel.trim(),
+                cachedModels = cfModels.toMutableList()
             )
 
+            // Compare only the fields the user actually configures, so a changed model
+            // cache does not create duplicate entries.
             val updatedSavedCustom = config.savedCustomConfigs.toMutableList()
             if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank()) {
-                 if (updatedSavedCustom.none { it == newCustomConfig }) updatedSavedCustom.add(newCustomConfig)
+                 val exists = updatedSavedCustom.any { it.baseUrl == newCustomConfig.baseUrl && it.apiKey == newCustomConfig.apiKey && it.model == newCustomConfig.model }
+                 if (!exists) updatedSavedCustom.add(newCustomConfig)
             }
 
             val updatedSavedGemini = config.savedGeminiConfigs.toMutableList()
@@ -625,7 +777,8 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
 
             val updatedSavedCloudflare = config.savedCloudflareConfigs.toMutableList()
             if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank()) {
-                 if (updatedSavedCloudflare.none { it == newCloudflareConfig }) updatedSavedCloudflare.add(newCloudflareConfig)
+                 val exists = updatedSavedCloudflare.any { it.accountId == newCloudflareConfig.accountId && it.apiToken == newCloudflareConfig.apiToken && it.model == newCloudflareConfig.model }
+                 if (!exists) updatedSavedCloudflare.add(newCloudflareConfig)
             }
 
             val updatedSavedLocal = config.savedLocalModels.toMutableList()
@@ -639,6 +792,7 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
                 provider = selectedProvider,
                 apiKey = geminiKey.trim(),
                 model = geminiModel.trim(),
+                cachedGeminiModels = geminiModels.toMutableList(),
                 cloudflareConfig = newCloudflareConfig,
                 customApiConfig = newCustomConfig,
                 localLlmConfig = config.localLlmConfig, // This is updated via the sliders in LocalLlmSetup
@@ -662,7 +816,17 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
             }
             
             onSave(newConfig)
-            Toast.makeText(context, "Config Saved", Toast.LENGTH_SHORT).show()
+            val activeModelLabel = when (selectedProvider) {
+                "gemini" -> geminiModel.trim()
+                "cloudflare" -> cfModel.trim()
+                "custom" -> customModel.trim()
+                else -> ""
+            }
+            Toast.makeText(
+                context,
+                if (activeModelLabel.isBlank()) "Config Saved" else "Config Saved • using $activeModelLabel",
+                Toast.LENGTH_SHORT
+            ).show()
             
             when (selectedProvider) {
                 "gemini" -> if (geminiKey.isNotBlank()) verifyGemini(geminiKey.trim())
@@ -1005,8 +1169,26 @@ fun CustomApiHelp(primaryColor: Color, context: android.content.Context) {
     Spacer(Modifier.height(8.dp))
     Text("1. Base URL: The API endpoint (e.g. https://api.groq.com/openai/v1 or http://localhost:11434/v1)", fontSize = 14.sp)
     Text("2. API Key: Your provider's API key (leave blank for local LLMs).", fontSize = 14.sp)
-    Text("3. Model Name: The specific model ID (e.g. llama3-70b-8192, gpt-4o).", fontSize = 14.sp)
+    Text("3. Model Name: Tap 'Fetch Models' to read the available models from the provider, then pick one from the list. You can still type a model ID by hand.", fontSize = 14.sp)
+    Spacer(Modifier.height(8.dp))
+    Text("Tip: the 'Quick setup' chips fill the Base URL for popular providers (OpenAI, Groq, OpenRouter, DeepSeek, Ollama, LM Studio and more), so you only need to paste your key.", fontSize = 14.sp)
 }
+
+/** Well known OpenAI compatible providers, used by the "Quick setup" chips. */
+private data class ApiPreset(val label: String, val baseUrl: String)
+
+private val apiPresets = listOf(
+    ApiPreset("OpenAI", "https://api.openai.com/v1"),
+    ApiPreset("Groq", "https://api.groq.com/openai/v1"),
+    ApiPreset("OpenRouter", "https://openrouter.ai/api/v1"),
+    ApiPreset("DeepSeek", "https://api.deepseek.com/v1"),
+    ApiPreset("Together", "https://api.together.xyz/v1"),
+    ApiPreset("Mistral", "https://api.mistral.ai/v1"),
+    ApiPreset("xAI (Grok)", "https://api.x.ai/v1"),
+    ApiPreset("Cerebras", "https://api.cerebras.ai/v1"),
+    ApiPreset("Ollama (local)", "http://localhost:11434/v1"),
+    ApiPreset("LM Studio (local)", "http://localhost:1234/v1")
+)
 
 private fun getFileName(context: android.content.Context, uriOrPath: String): String {
     if (uriOrPath.isBlank()) return "No model selected"

@@ -51,6 +51,15 @@ TypeAssist uses Accessibility to trigger AI actions via simple commands, with su
 *   **Date & Time:** Insert current timestamps with `.now` or `.date`.
 *   **Password Generator:** Generate strong random passwords on the fly with `.pass`.
 
+### 🎛 Model Selection
+*   **Auto Model Read:** TypeAssist asks your provider which models it currently offers and lists them - no more guessing exact model IDs.
+    *   **Custom / OpenAI-compatible APIs:** `GET {baseUrl}/models` (works with OpenAI, Groq, OpenRouter, DeepSeek, Together, Mistral, Ollama, LM Studio, vLLM, ...).
+    *   **Gemini:** reads the live model list for your key from Google.
+    *   **Cloudflare Workers AI:** reads the models available to your account.
+*   **Searchable Picker:** Fetched lists are searchable and cached on device, so picking a model still works offline.
+*   **Quick Setup:** One tap fills the Base URL for popular providers (OpenAI, Groq, OpenRouter, DeepSeek, Together, Mistral, xAI, Cerebras, Ollama, LM Studio).
+*   **Readable Errors:** API failures show the provider's own message (e.g. `401: Incorrect API key provided (check your API key)`) instead of raw JSON.
+
 ### 💾 Data Management
 *   **Backup & Restore:** Securely export your settings, snippets, and API configurations to a `.tabak` file.
 *   **Saved Configurations:** Save and switch between multiple API setups (e.g., "Personal Gemini", "Work Custom API").
@@ -94,7 +103,8 @@ Want to try the latest features before they are officially released? You can dow
 2.  **Permissions:** Enable the **TypeAssist Accessibility Service** in your Android Settings.
 3.  **API Key:** Open the app, go to **Settings**, and add your API keys.
     *   Supports Google Gemini, Cloudflare Workers AI, and Custom OpenAI Endpoints.
-4.  **Start Typing:** Open any app (WhatsApp, Notes, Chrome) and try a trigger!
+4.  **Pick a Model:** Tap **Fetch Models** to read the model list from your provider, then choose one from the searchable list (or type it manually).
+5.  **Start Typing:** Open any app (WhatsApp, Notes, Chrome) and try a trigger!
 
 ---
 

@@ -1,0 +1,44 @@
+name: Debug APK (test build)
+
+# Builds an installable debug APK on demand.
+# Add the "build-debug" label to a pull request to trigger it - normal pull
+# requests stay fast because the job is skipped without the label.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  build-debug-apk:
+    if: contains(github.event.pull_request.labels.*.name, 'build-debug')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - name: Setup Android NDK
+        run: |
+          echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973"
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'adopt'
+          java-version: 17
+          cache: 'gradle'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: TypeAssist-debug-apk
+          path: app/build/outputs/apk/**/debug/*.apk
+          if-no-files-found: error

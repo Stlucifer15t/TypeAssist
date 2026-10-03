@@ -49,6 +49,27 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
                 if (loadedConfig.snippets == null) {
                     loadedConfig.snippets = mutableListOf()
                 }
+                if (loadedConfig.savedGeminiConfigs == null) {
+                    loadedConfig.savedGeminiConfigs = mutableListOf()
+                }
+                if (loadedConfig.savedCloudflareConfigs == null) {
+                    loadedConfig.savedCloudflareConfigs = mutableListOf()
+                }
+                if (loadedConfig.savedLocalModels == null) {
+                    loadedConfig.savedLocalModels = mutableListOf()
+                }
+                // Cached model lists (added in 4.3.0) - configs saved before that have none.
+                if (loadedConfig.cachedGeminiModels == null) {
+                    loadedConfig.cachedGeminiModels = com.typeassist.app.data.defaultGeminiModels()
+                }
+                loadedConfig.customApiConfig?.let { custom ->
+                    if (custom.cachedModels == null) custom.cachedModels = mutableListOf()
+                }
+                loadedConfig.cloudflareConfig?.let { cloudflare ->
+                    if (cloudflare.cachedModels == null) {
+                        cloudflare.cachedModels = com.typeassist.app.data.defaultCloudflareModels()
+                    }
+                }
                 // Migration: Convert old single content to contents list
                 loadedConfig.snippets?.forEach { snippet ->
                     if (snippet.contents == null) snippet.contents = mutableListOf()
