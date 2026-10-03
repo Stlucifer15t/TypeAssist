@@ -1,11 +1,12 @@
-# Prompt AI 🚀
+# Prompt AI 🚀 — Fork by Stlucifer15t
 
 <p align="center">
   <img src="app/src/main/ic_launcher-playstore.png" width="128" height="128" />
 </p>
 
 <p align="center">
-  <b>AI writing tools and utilities in every Android text field.</b>
+  <b>AI writing tools and utilities in every Android text field.</b><br/>
+  <i>Forked from <a href="https://github.com/estiaksoyeb/TypeAssist">estiaksoyeb/TypeAssist</a> with new features and cleanups.</i>
 </p>
 
 <p align="center">
@@ -15,13 +16,32 @@
   <a href="https://github.com/Stlucifer15t/TypeAssist/releases"><img src="https://img.shields.io/github/downloads/Stlucifer15t/TypeAssist/total?logo=Github"/></a>
 </p>
 
-Prompt AI is the new display name for this TypeAssist-based Android app. It uses Android Accessibility to trigger AI actions and text utilities with simple commands. The Android package ID remains `com.typeassist.app` for compatibility.
+> **Acknowledgement:** This repository is a **fork** of [estiaksoyeb/TypeAssist](https://github.com/estiaksoyeb/TypeAssist) (originally Prompt AI / TypeAssist). Original work and core functionality by Estiak Soyeb. This fork maintains the same package ID `com.typeassist.app` for compatibility and builds upon it.
+
+---
+
+## 🆕 What's New in This Fork
+
+### Compared to upstream:
+
+- **🎨 New App Icon** — Rebranded to **P** for Prompt AI with purple-to-blue gradient and sparkle accent. All mipmap densities + monochrome + Play Store icon updated.
+- **💫 Loading Indicator Styles** — No more bland spinner! Choose from 7 styles in Settings → General → Floating controls:
+  - `Classic` - Simple spinner
+  - `Dots` - Bouncing 3 dots with alpha + scale
+  - `Pulse` - Pulsing glow effect
+  - `Bars` - Equalizer bars
+  - `Typing` - iMessage-style typing bubble
+  - `Pill` - Rounded pill with "AI thinking..."
+  - `Neon ring` - Glowing ring loader
+  - Live preview in settings + fully animated overlay via `OverlayManager`
+- **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) now only **build Full APK and upload unsigned artifact** (`app-full-release-unsigned.apk`). No `SIGNING_KEY_*` secrets required — download artifact and sign with MT Manager.
+- **🧹 UI Cleanup** — Removed `Support development` (Binance/USDT) section, `Twitter`, and `Telegram community` links from Home screen. `Made with care` now only shows **Source code on GitHub → https://github.com/Stlucifer15t/TypeAssist**
+- **⚙️ Config** — Added `loadingIndicatorStyle` to `AppConfig` with backward-compatible fallback.
 
 ---
 
 ## 📸 Screenshots
 
-  <!-- Screenshots -->
   <div align="center">
     <img src="screenshots/7.PNG" width="30%"  alt=""/>
     <img src="screenshots/8.PNG" width="30%"  alt=""/>
@@ -30,11 +50,11 @@ Prompt AI is the new display name for this TypeAssist-based Android app. It uses
 
 ---
 
-## ✨ Features
+## ✨ Features (from upstream)
 
 ### 🤖 AI Capabilities
 *   **Ask AI:** Query Google Gemini, Cloudflare Workers AI, or **any OpenAI-compatible Custom API** directly from any app.
-*   **Live Model Picker:** Load models available to your Gemini key or OpenAI-compatible endpoint, then search, select, favorite, and revisit recent models. Manual model IDs remain supported for providers without a model-list endpoint.
+*   **Live Model Picker:** Load models available to your Gemini key or OpenAI-compatible endpoint, then search, select, favorite, and revisit recent models.
 *   **Provider Diagnostics:** Test a setup with clearer guidance for common key, URL, model, quota, and network errors.
 *   **Grammar Fix:** Instantly correct spelling, punctuation, and grammar errors.
 *   **Translation:** Translate text from any language to English (or your preferred language).
@@ -45,29 +65,24 @@ Prompt AI is the new display name for this TypeAssist-based Android app. It uses
     *   **Result:** "Please join us for a meeting at 3:00 PM. Kindly remember to bring your laptop as we will be working through some examples together."
 
 ### 🛠 Utility Belt (Offline Tools)
-*   **Smart Calculator:** Solve math expressions in-place.
-    *   Example: `(.c: 25 * 4 + 10)` -> `110`
-*   **Snippets (Text Expander):** Expand shortcuts into full text blocks.
-    *   Example: `..email` -> `user@example.com`
-    *   **Quick Save:** Save new snippets instantly without opening the app: `(.save:trigger:content)`
+*   **Smart Calculator:** Solve math expressions in-place. Example: `(.c: 25 * 4 + 10)` -> `110`
+*   **Snippets (Text Expander):** Expand shortcuts into full text blocks. Example: `..email` -> `user@example.com`
+*   **Quick Save:** Save new snippets instantly: `(.save:trigger:content)`
 *   **Date & Time:** Insert current timestamps with `.now` or `.date`.
-*   **Password Generator:** Generate strong random passwords on the fly with `.pass`.
+*   **Password Generator:** Generate strong random passwords with `.pass`.
 
 ### 💾 Data Management
 *   **Backup & Restore:** Export your settings, snippets, and API configurations to a `.tabak` file. Add a password to encrypt the backup.
-*   **Saved Configurations:** Save and switch between multiple API setups (e.g., "Personal Gemini", "Work Custom API").
+*   **Saved Configurations:** Save and switch between multiple API setups.
 
 ### 🛡 Safety & Privacy
 *   **Global Undo:** Revert any action instantly using `.undo`.
 *   **History Manager:** View and recover original text from the last 5 minutes.
-*   **Privacy First:** AI requests are sent only when you invoke an AI command. If enabled, recent originals stay in app memory for up to five minutes; API settings remain in private app storage.
+*   **Privacy First:** AI requests are sent only when you invoke an AI command.
 
 ---
 
 ## 📖 Usage Guide
-
-### Standard Triggers
-Type your text followed by a trigger to process it.
 
 | Trigger | Action | Example |
 | :--- | :--- | :--- |
@@ -78,40 +93,29 @@ Type your text followed by a trigger to process it.
 | `...` | Global Rewrite | `I am late ...make polite...` |
 | `.undo` | Undo | Reverts the last replacement |
 
-
-
 ---
 
 ## 🧪 Preview Builds
 
-Want to try a signed test build? In GitHub Actions, run **Prompt AI Preview Build & Deploy** to build the Full APK. Tagged Full releases are also signed with the Android release key when the required GitHub Actions secrets are configured.
+This fork's workflows build **unsigned** Full APK as artifact:
+- **Pull Requests** → `PromptAI-Full-unsigned`
+- **Tags `v*`** → `PromptAI-vX.Y.Z-Full-unsigned`
+- **Preview tags `v*-preview.*`** → same pattern
+- **Manual dispatch** → `PromptAI-preview-Full-unsigned`
 
-[![Download Preview Builds](https://img.shields.io/badge/Download-Preview%20Builds-red?style=for-the-badge)](https://github.com/Stlucifer15t/TypeAssist/actions)
+Download from **Actions → workflow run → Artifacts**, then sign with **MT Manager** or `apksigner`.
+
+[![Download Artifacts](https://img.shields.io/badge/Download-Artifacts-blue?style=for-the-badge)](https://github.com/Stlucifer15t/TypeAssist/actions)
 
 ---
 
 ## 📥 Installation & Setup
 
-1.  **Download:** Get the latest APK from the [Releases](https://github.com/Stlucifer15t/TypeAssist/releases) page.
-2.  **Permissions:** Enable the **Prompt AI Accessibility Service** in Android Settings.
-3.  **API Key:** Open the app, go to **Settings**, and add your API keys.
-    *   Supports Google Gemini, Cloudflare Workers AI, and Custom OpenAI Endpoints.
-4.  **Start Typing:** Open any app (WhatsApp, Notes, Chrome) and try a trigger!
-
----
-
-## 🤝 Support Development
-
-If Prompt AI helps you in your daily workflow, consider supporting the development! Since traditional payment methods like PayPal are unavailable in my region, I accept donations via Binance and Cryptocurrency.
-
-**Preferred Method (Zero Fees):**
-*   **Binance Pay ID:** `724197813`
-
-**Other Cryptocurrencies:**
-*   **USDT (TRC20):** `TPP5S7HdV4Hrrtp5Cjz7TNtttUAfZXJz5a`
-*   **TRX (Tron):** `TPP5S7HdV4Hrrtp5Cjz7TNtttUAfZXJz5a`
-
-*Every bit helps keep this project open-source and covers the maintenance costs.*
+1.  **Download:** Get the latest unsigned APK from Actions artifacts or Releases.
+2.  **Sign:** Sign with MT Manager if unsigned.
+3.  **Permissions:** Enable the **Prompt AI Accessibility Service** in Android Settings.
+4.  **API Key:** Open the app → **Settings** → add your API keys (Gemini, Cloudflare, Custom, Local LLM).
+5.  **Start Typing:** Open any app and try a trigger!
 
 ---
 
@@ -125,7 +129,7 @@ If Prompt AI helps you in your daily workflow, consider supporting the developme
 ---
 
 ## 📜 License
-Distributed under the **GPLv3 License**. See `LICENSE` for more information.
+Distributed under the **GPLv3 License**. See `LICENSE` for more information. Original license retained from upstream.
 
 ---
 
@@ -133,12 +137,17 @@ Distributed under the **GPLv3 License**. See `LICENSE` for more information.
 
 Prompt AI has no AI proxy server: AI requests go directly from your device to the provider you choose.
 
-### How We Handle Data
-*   **Direct Connection:** AI text is sent directly from your device to your selected provider (Gemini, Cloudflare, or an OpenAI-compatible endpoint). Prompt AI does not proxy AI requests.
-*   **On-Demand AI:** The Accessibility Service observes editable-field text changes to find commands. AI text is sent only when an AI command is invoked. Live model discovery, connection tests, and update checks also make network requests.
-*   **Local Storage:** API settings are kept in app-private storage. An unprotected `.tabak` backup is compressed but not encrypted; a password-protected backup is encrypted. Recent text history is temporary and in-memory.
+*   **Direct Connection:** AI text is sent directly from your device to your selected provider.
+*   **On-Demand AI:** The Accessibility Service observes editable-field text changes to find commands. AI text is sent only when an AI command is invoked.
+*   **Local Storage:** API settings are kept in app-private storage.
 
 ### 📜 Provider Policies
-Your input data is processed by the provider you configure. Please review their policies:
 *   **Google Gemini:** [API Terms of Service](https://ai.google.dev/gemini-api/terms)
 *   **Cloudflare Workers AI:** [Data Usage & Privacy](https://developers.cloudflare.com/workers-ai/platform/data-usage/)
+
+---
+
+## 🙏 Credits
+- **Original Author:** [estiaksoyeb](https://github.com/estiaksoyeb) — [TypeAssist](https://github.com/estiaksoyeb/TypeAssist)
+- **Fork Maintainer:** [Stlucifer15t](https://github.com/Stlucifer15t)
+- New icon, loading styles, workflow simplification, and UI cleanup by this fork.

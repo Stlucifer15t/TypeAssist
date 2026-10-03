@@ -33,3 +33,10 @@ jobs:
 
       - name: Build Full release variant
         run: ./gradlew assembleFullRelease --stacktrace
+
+      - name: Upload Full APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PromptAI-Full-unsigned
+          path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
+          if-no-files-found: error

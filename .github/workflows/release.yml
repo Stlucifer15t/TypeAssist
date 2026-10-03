@@ -1,8 +1,5 @@
 name: Publish Prompt AI release
 
-permissions:
-  contents: write
-
 on:
   push:
     tags:
@@ -11,7 +8,7 @@ on:
 jobs:
   release:
     if: ${{ !contains(github.ref_name, '-preview.') }}
-    name: Build and sign Full APK
+    name: Build Full APK
     runs-on: ubuntu-latest
 
     steps:
@@ -29,6 +26,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
 
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
@@ -36,56 +34,9 @@ jobs:
       - name: Build Full release APK
         run: ./gradlew assembleFullRelease --stacktrace
 
-      - name: Validate and set release tag
-        run: |
-          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Expected a stable release tag like v4.2.0; got $GITHUB_REF_NAME" >&2
-            exit 1
-          fi
-          echo "VERSION_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
-
-      - name: Sign and verify APK
-        env:
-          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
-          SIGNING_KEY_ALIAS: ${{ secrets.ALIAS }}
-          SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          unsigned_apk="app/build/outputs/apk/full/release/app-full-release-unsigned.apk"
-          signed_apk="app/build/outputs/apk/full/release/PromptAI-${VERSION_TAG}.apk"
-          release_keystore="$RUNNER_TEMP/release.keystore"
-          trap 'rm -f "$release_keystore"' EXIT
-
-          if [[ -z "$SIGNING_KEY_BASE64" || -z "$SIGNING_KEY_ALIAS" || -z "$SIGNING_KEY_STORE_PASSWORD" || -z "$SIGNING_KEY_PASSWORD" ]]; then
-            echo "Required signing secrets are missing: SIGNING_KEY_BASE64, ALIAS, KEY_STORE_PASSWORD, KEY_PASSWORD" >&2
-            exit 1
-          fi
-          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$release_keystore"
-
-          apksigner="$ANDROID_HOME/build-tools/34.0.0/apksigner"
-          "$apksigner" sign \
-            --ks "$release_keystore" \
-            --ks-key-alias "$SIGNING_KEY_ALIAS" \
-            --ks-pass "pass:$SIGNING_KEY_STORE_PASSWORD" \
-            --key-pass "pass:$SIGNING_KEY_PASSWORD" \
-            --out "$signed_apk" \
-            "$unsigned_apk"
-          "$apksigner" verify "$signed_apk"
-          sha256sum "$signed_apk" | awk '{ print $1 }' > "$RUNNER_TEMP/apk.sha256"
-          echo "APK_SHA256=$(cat "$RUNNER_TEMP/apk.sha256")" >> "$GITHUB_ENV"
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+      - name: Upload Full APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Prompt AI ${{ github.ref_name }}
-          body: |
-            ### APK checksum
-
-            SHA-256: `${{ env.APK_SHA256 }}`
-          files: app/build/outputs/apk/full/release/PromptAI-${{ github.ref_name }}.apk
-          draft: true
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: PromptAI-${{ github.ref_name }}-Full-unsigned
+          path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
+          if-no-files-found: error

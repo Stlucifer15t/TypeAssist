@@ -3,8 +3,19 @@ package com.typeassist.app.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -12,10 +23,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -50,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +74,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -190,6 +209,7 @@ private fun GeneralSettingsTabModern(
     val scope = rememberCoroutineScope()
     var enableUndoOverlay by remember(config.enableUndoOverlay) { mutableStateOf(config.enableUndoOverlay) }
     var enableLoadingOverlay by remember(config.enableLoadingOverlay) { mutableStateOf(config.enableLoadingOverlay) }
+    var loadingStyle by remember(config.loadingIndicatorStyle) { mutableStateOf(config.loadingIndicatorStyle.ifBlank { "classic" }) }
     var allowTriggerAnywhere by remember(config.allowTriggerAnywhere) { mutableStateOf(config.allowTriggerAnywhere) }
     var ignorePrecedingWhitespace by remember(config.ignorePrecedingWhitespace) { mutableStateOf(config.ignorePrecedingWhitespace) }
     var globalTriggerPattern by remember(config.globalTriggerPattern) { mutableStateOf(config.globalTriggerPattern) }
@@ -197,6 +217,18 @@ private fun GeneralSettingsTabModern(
     var previewEnabled by remember(config.enablePreviewDialog) { mutableStateOf(config.enablePreviewDialog) }
     var timeout by remember(config.apiTimeoutSeconds) { mutableStateOf(config.apiTimeoutSeconds.toFloat()) }
     var checkingForUpdate by remember { mutableStateOf(false) }
+
+    val loadingStyles = remember {
+        listOf(
+            LoadingStyleOption("classic", "Classic", "Simple spinner on dark bubble"),
+            LoadingStyleOption("dots", "Bouncing dots", "Three dots that bounce and fade"),
+            LoadingStyleOption("pulse", "Pulse", "Pulsing glow effect"),
+            LoadingStyleOption("bars", "Bars", "Equalizer bars animation"),
+            LoadingStyleOption("typing", "Typing", "iMessage-style typing bubble"),
+            LoadingStyleOption("pill", "Pill", "Rounded pill with text"),
+            LoadingStyleOption("neon", "Neon ring", "Glowing ring loader")
+        )
+    }
 
     ModernSettingsSection(
         title = "Floating controls",
@@ -218,6 +250,82 @@ private fun GeneralSettingsTabModern(
         ) {
             enableLoadingOverlay = it
             onSave(config.copy(enableLoadingOverlay = it))
+        }
+
+        if (enableLoadingOverlay) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Indicator style",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(8.dp))
+
+            var expanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = loadingStyles.firstOrNull { it.id == loadingStyle }?.name ?: loadingStyle,
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    label = { Text("Style") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    loadingStyles.forEach { style ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(style.name, fontWeight = FontWeight.SemiBold)
+                                    Text(style.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            },
+                            onClick = {
+                                loadingStyle = style.id
+                                expanded = false
+                                onSave(config.copy(loadingIndicatorStyle = style.id))
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            // Live preview
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Preview",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(90.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF121212)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingStylePreview(styleId = loadingStyle)
+                    }
+                }
+            }
         }
     }
 
@@ -1011,6 +1119,236 @@ private fun SavedProviderRow(
         }
         IconButton(onClick = onDelete) {
             Icon(Icons.Default.Delete, contentDescription = "Delete saved profile", tint = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+private data class LoadingStyleOption(
+    val id: String,
+    val name: String,
+    val description: String
+)
+
+@Composable
+private fun LoadingStylePreview(styleId: String) {
+    val primary = Color(0xFF818CF8)
+    val white = Color.White
+    when (styleId) {
+        "classic" -> {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0x99000000))
+                    .padding(14.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = white,
+                    strokeWidth = 2.5.dp
+                )
+            }
+        }
+        "dots" -> {
+            val infinite = rememberInfiniteTransition(label = "dots")
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xEE1E1E1E))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(28.dp))
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(3) { i ->
+                    val scale by infinite.animateFloat(
+                        initialValue = 0.6f,
+                        targetValue = 1.2f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(600, delayMillis = i * 180, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "dotScale$i"
+                    )
+                    val alpha by infinite.animateFloat(
+                        initialValue = 0.3f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(600, delayMillis = i * 180),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "dotAlpha$i"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .scale(scale)
+                            .alpha(alpha)
+                            .clip(CircleShape)
+                            .background(white)
+                    )
+                }
+            }
+        }
+        "pulse" -> {
+            val infinite = rememberInfiniteTransition(label = "pulse")
+            val scale by infinite.animateFloat(
+                initialValue = 0.8f,
+                targetValue = 1.35f,
+                animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                label = "pulseScale"
+            )
+            val outerScale by infinite.animateFloat(
+                initialValue = 0.9f,
+                targetValue = 1.6f,
+                animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
+                label = "outerScale"
+            )
+            val outerAlpha by infinite.animateFloat(
+                initialValue = 0.8f,
+                targetValue = 0.15f,
+                animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
+                label = "outerAlpha"
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xEE1E1E1E))
+                    .border(2.dp, primary, RoundedCornerShape(28.dp))
+                    .padding(18.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .scale(outerScale)
+                        .alpha(outerAlpha)
+                        .clip(CircleShape)
+                        .background(primary.copy(alpha = 0.35f))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .scale(scale)
+                        .clip(CircleShape)
+                        .background(white)
+                )
+            }
+        }
+        "bars" -> {
+            val infinite = rememberInfiniteTransition(label = "bars")
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xEE1E1E1E))
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                repeat(3) { i ->
+                    val scale by infinite.animateFloat(
+                        initialValue = 0.4f,
+                        targetValue = 1.7f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(500, delayMillis = i * 130, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "bar$i"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(6.dp)
+                            .height(18.dp)
+                            .scale(scaleY = scale)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(white)
+                    )
+                }
+            }
+        }
+        "typing" -> {
+            val infinite = rememberInfiniteTransition(label = "typing")
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xFF2A2A2E))
+                    .border(2.dp, primary, RoundedCornerShape(28.dp))
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(3) { i ->
+                    val offset by infinite.animateFloat(
+                        initialValue = 0f,
+                        targetValue = -8f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(380, delayMillis = i * 110, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "typingOffset$i"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .offset(y = offset.dp)
+                            .size(9.dp)
+                            .clip(CircleShape)
+                            .background(primary)
+                    )
+                }
+            }
+        }
+        "pill" -> {
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50.dp))
+                    .background(Color(0xEE1E1E1E))
+                    .border(2.dp, primary, RoundedCornerShape(50.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = primary,
+                    strokeWidth = 2.dp
+                )
+                Text("AI thinking…", color = white, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            }
+        }
+        "neon" -> {
+            val infinite = rememberInfiniteTransition(label = "neon")
+            val rotation by infinite.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
+                label = "rotation"
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color(0xDD111113))
+                    .border(1.dp, primary, RoundedCornerShape(32.dp))
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier.size(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Use simple CircularProgressIndicator with rotation illusion
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(32.dp),
+                        color = primary,
+                        strokeWidth = 3.dp
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(white)
+                    )
+                }
+            }
         }
     }
 }

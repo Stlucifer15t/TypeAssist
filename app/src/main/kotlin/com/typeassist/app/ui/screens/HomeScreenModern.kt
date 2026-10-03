@@ -367,7 +367,6 @@ fun HomeScreen(
                 }
             }
 
-            item { DonationSection() }
             item { DeveloperCreditSection() }
             item {
                 Text(
