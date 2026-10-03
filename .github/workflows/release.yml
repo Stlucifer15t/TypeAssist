@@ -1,4 +1,4 @@
-name: Make release
+name: Publish Prompt AI release
 
 permissions:
   contents: write
@@ -6,121 +6,85 @@ permissions:
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v*'
 
 jobs:
-  release-for-github:
-    name: "Release for GitHub"
+  release:
+    if: ${{ !contains(github.ref_name, '-preview.') }}
+    name: Build and sign Full APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
 
-      - name: Setup Android NDK
-        run: |
-          echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973"
+      - name: Install Android NDK
+        run: echo "y" | sudo "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.0.12077973"
 
-      - name: Setup JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'adopt'
+          distribution: temurin
           java-version: 17
 
-      - name: Make gradlew executable
+      - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build release with Gradle
-        run: ./gradlew assembleRelease --stacktrace
+      - name: Build Full release APK
+        run: ./gradlew assembleFullRelease --stacktrace
 
-      - name: Get tag name
-        if: startsWith(github.ref, 'refs/tags/')
-        run: echo "VERSION_TAG=$(basename $GITHUB_REF)" >> $GITHUB_ENV
-
-      - name: Verify build output
+      - name: Validate and set release tag
         run: |
-          echo "=== All APKs found ==="
-          find app/build/outputs/apk -name "*.apk" -type f
-          for FLAVOR in full fdroid; do
-            RELEASE_DIR="app/build/outputs/apk/${FLAVOR}/release"
-            if [ ! -d "$RELEASE_DIR" ]; then
-              echo "Missing expected release dir: $RELEASE_DIR"
-              exit 1
-            fi
-            echo "--- $FLAVOR ---"
-            ls -lah "$RELEASE_DIR"
-          done
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Expected a stable release tag like v4.2.0; got $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "VERSION_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
-      - name: Sign APKs
+      - name: Sign and verify APK
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ALIAS }}
+          SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          set -e
+          set -euo pipefail
+          unsigned_apk="app/build/outputs/apk/full/release/app-full-release-unsigned.apk"
+          signed_apk="app/build/outputs/apk/full/release/PromptAI-${VERSION_TAG}.apk"
+          release_keystore="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$release_keystore"' EXIT
 
-          # Decode Keystore from Secret (BASE64)
-          echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > release.keystore
+          if [[ -z "$SIGNING_KEY_BASE64" || -z "$SIGNING_KEY_ALIAS" || -z "$SIGNING_KEY_STORE_PASSWORD" || -z "$SIGNING_KEY_PASSWORD" ]]; then
+            echo "Required signing secrets are missing: SIGNING_KEY_BASE64, ALIAS, KEY_STORE_PASSWORD, KEY_PASSWORD" >&2
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$release_keystore"
 
-          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
-          CHECKSUM_FULL=""
-          CHECKSUM_FDROID=""
+          apksigner="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          "$apksigner" sign \
+            --ks "$release_keystore" \
+            --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --ks-pass "pass:$SIGNING_KEY_STORE_PASSWORD" \
+            --key-pass "pass:$SIGNING_KEY_PASSWORD" \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+          "$apksigner" verify "$signed_apk"
+          sha256sum "$signed_apk" | awk '{ print $1 }' > "$RUNNER_TEMP/apk.sha256"
+          echo "APK_SHA256=$(cat "$RUNNER_TEMP/apk.sha256")" >> "$GITHUB_ENV"
 
-          for FLAVOR in full fdroid; do
-            RELEASE_DIR="app/build/outputs/apk/${FLAVOR}/release"
-            apk_file="$RELEASE_DIR/app-${FLAVOR}-release-unsigned.apk"
-            if [ "$FLAVOR" = "full" ]; then
-              signed_apk="$RELEASE_DIR/TypeAssist-${VERSION_TAG}.apk"
-            else
-              signed_apk="$RELEASE_DIR/TypeAssist-${FLAVOR}-${VERSION_TAG}.apk"
-            fi
-
-            if [ ! -f "$apk_file" ]; then
-              echo "APK not found: $apk_file"
-              ls -lah "$RELEASE_DIR"
-              rm release.keystore
-              exit 1
-            fi
-
-            $APKSIGNER sign \
-              --ks release.keystore \
-              --ks-key-alias "${{ secrets.ALIAS }}" \
-              --ks-pass "pass:${{ secrets.KEY_STORE_PASSWORD }}" \
-              --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
-              --out "$signed_apk" \
-              "$apk_file"
-
-            $APKSIGNER verify "$signed_apk"
-            ls -lh "$signed_apk"
-
-            checksum=$(sha256sum "$signed_apk" | awk '{ print $1 }')
-            if [ "$FLAVOR" = "full" ]; then
-              CHECKSUM_FULL="$checksum"
-            else
-              CHECKSUM_FDROID="$checksum"
-            fi
-          done
-
-          rm release.keystore
-
-          echo "apk_sha256_full=$CHECKSUM_FULL" >> "$GITHUB_ENV"
-          echo "apk_sha256_fdroid=$CHECKSUM_FDROID" >> "$GITHUB_ENV"
-
-      - name: Create GitHub Release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ env.VERSION_TAG }}
-          name: TypeAssist ${{ env.VERSION_TAG }}
+          tag_name: ${{ github.ref_name }}
+          name: Prompt AI ${{ github.ref_name }}
           body: |
-            ---
-            ### Checksums
+            ### APK checksum
 
-            | Variant | SHA-256 |
-            | ------- | ------- |
-            | Full | ${{ env.apk_sha256_full }} |
-            | F-Droid | ${{ env.apk_sha256_fdroid }} |
-          files: |
-            app/build/outputs/apk/full/release/TypeAssist-${{ env.VERSION_TAG }}.apk
-            app/build/outputs/apk/fdroid/release/TypeAssist-fdroid-${{ env.VERSION_TAG }}.apk
+            SHA-256: `${{ env.APK_SHA256 }}`
+          files: app/build/outputs/apk/full/release/PromptAI-${{ github.ref_name }}.apk
           draft: true
           prerelease: false
         env:

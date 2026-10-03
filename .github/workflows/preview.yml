@@ -1,7 +1,7 @@
-name: Preview Build & Deploy
+name: Prompt AI Preview Build & Deploy
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -17,94 +17,99 @@ jobs:
       apk_size: ${{ steps.set_commit.outputs.apk_size }}
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
 
-      - name: Setup Android NDK
-        run: |
-          echo "y" | sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.0.12077973"
+      - name: Install Android NDK
+        run: echo "y" | sudo "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.0.12077973"
 
-      - name: Setup JDK 17
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'adopt'
+          distribution: temurin
           java-version: 17
-          cache: 'gradle'
+          cache: gradle
 
-      - name: Make gradlew executable
+      - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew assembleRelease
+      - name: Build Full release APK
+        run: ./gradlew assembleFullRelease
 
-      - name: Sign APK
+      - name: Sign and verify Full APK
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.SIGNING_KEY_BASE64 }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ALIAS }}
+          SIGNING_KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          set -e
-          # Decode Keystore from Secret (BASE64)
-          echo "${{ secrets.SIGNING_KEY_BASE64 }}" | base64 -d > release.keystore
+          set -euo pipefail
+          release_keystore="$RUNNER_TEMP/release.keystore"
+          trap 'rm -f "$release_keystore"' EXIT
 
-          APKSIGNER="$ANDROID_HOME/build-tools/34.0.0/apksigner"
-          RELEASE_DIR="app/build/outputs/apk/full/release"
-          apk_file="$RELEASE_DIR/app-full-release-unsigned.apk"
-          signed_apk="$RELEASE_DIR/app-full-release.apk"
+          if [[ -z "$SIGNING_KEY_BASE64" || -z "$SIGNING_KEY_ALIAS" || -z "$SIGNING_KEY_STORE_PASSWORD" || -z "$SIGNING_KEY_PASSWORD" ]]; then
+            echo "Required signing secrets are missing: SIGNING_KEY_BASE64, ALIAS, KEY_STORE_PASSWORD, KEY_PASSWORD" >&2
+            exit 1
+          fi
+          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$release_keystore"
 
-          if [ ! -f "$apk_file" ]; then
-            echo "APK not found: $apk_file"
-            ls -lah "$RELEASE_DIR"
-            rm -f release.keystore
+          apksigner="$ANDROID_HOME/build-tools/34.0.0/apksigner"
+          release_dir="app/build/outputs/apk/full/release"
+          unsigned_apk="$release_dir/app-full-release-unsigned.apk"
+          signed_apk="$release_dir/app-full-release.apk"
+
+          if [[ ! -f "$unsigned_apk" ]]; then
+            echo "APK not found: $unsigned_apk" >&2
+            ls -lah "$release_dir"
             exit 1
           fi
 
-          $APKSIGNER sign \
-            --ks release.keystore \
-            --ks-key-alias "${{ secrets.ALIAS }}" \
-            --ks-pass "pass:${{ secrets.KEY_STORE_PASSWORD }}" \
-            --key-pass "pass:${{ secrets.KEY_PASSWORD }}" \
-            --out "$signed_apk" \
-            "$apk_file"
-
-          $APKSIGNER verify "$signed_apk"
+          "$apksigner" sign \\
+            --ks "$release_keystore" \\
+            --ks-key-alias "$SIGNING_KEY_ALIAS" \\
+            --ks-pass "pass:$SIGNING_KEY_STORE_PASSWORD" \\
+            --key-pass "pass:$SIGNING_KEY_PASSWORD" \\
+            --out "$signed_apk" \\
+            "$unsigned_apk"
+          "$apksigner" verify "$signed_apk"
           ls -lh "$signed_apk"
-          rm -f release.keystore
 
-
-      - name: Copy build artifacts
+      - name: Collect preview APK
         id: set_commit
         run: |
-          set -e
+          set -euo pipefail
           commit_count=$(git rev-list --count HEAD)
           build_time=$(date -u +"%Y-%m-%d %H:%M UTC")
-          echo "commit_count=$commit_count" >> $GITHUB_OUTPUT
-          echo "build_time=$build_time" >> $GITHUB_OUTPUT
+          apk="app/build/outputs/apk/full/release/app-full-release.apk"
+          destination="output/PromptAI-preview-r${commit_count}.apk"
 
-          mkdir -p output
-          # Explicitly find the signed APK (full flavor)
-          src=$(find app/build/outputs/apk/full/release -name "*-release.apk" | head -n 1)
-          if [ -z "$src" ]; then
-            echo "Signed APK not found!"
+          if [[ ! -f "$apk" ]]; then
+            echo "Signed Full APK not found: $apk" >&2
             ls -R app/build/outputs/apk/full/release
             exit 1
           fi
-          dest="output/TypeAssist-preview-r${commit_count}.apk"
-          cp "$src" "$dest"
-          
-          size=$(du -h "$dest" | cut -f1)
-          echo "apk_size=$size" >> $GITHUB_OUTPUT
 
-      - name: Upload artifact
+          mkdir -p output
+          cp "$apk" "$destination"
+          echo "commit_count=$commit_count" >> "$GITHUB_OUTPUT"
+          echo "build_time=$build_time" >> "$GITHUB_OUTPUT"
+          echo "apk_size=$(du -h "$destination" | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload preview APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: preview-apk
-          path: output/
+          path: output/PromptAI-preview-r${{ steps.set_commit.outputs.commit_count }}.apk
+          if-no-files-found: error
 
   publish:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifacts
+      - name: Download preview APK artifact
         uses: actions/download-artifact@v4
         with:
           name: preview-apk
@@ -112,14 +117,14 @@ jobs:
 
       - name: Generate download page
         run: |
-          commit_count=${{ needs.build.outputs.commit_count }}
+          commit_count="${{ needs.build.outputs.commit_count }}"
           build_time="${{ needs.build.outputs.build_time }}"
           echo "<!DOCTYPE html>
           <html lang='en'>
           <head>
             <meta charset='UTF-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-            <title>TypeAssist Preview Builds</title>
+            <title>Prompt AI Preview Builds</title>
             <style>
               body { font-family: sans-serif; padding: 2em; background: #0d1117; color: #c9d1d9; }
               h1 { color: #58a6ff; }
@@ -129,17 +134,17 @@ jobs:
             </style>
           </head>
           <body>
-            <h1>TypeAssist Preview Build r${commit_count}</h1>
+            <h1>Prompt AI Preview Build r${commit_count}</h1>
             <p>Build time: ${build_time}</p>
-            <p>Download the latest signed APK:</p>
+            <p>Download the latest signed Full APK:</p>
             <ul>
-              <li><a href='TypeAssist-preview-r${commit_count}.apk'>Download APK (${{ needs.build.outputs.apk_size }})</a></li>
+              <li><a href='PromptAI-preview-r${commit_count}.apk'>Download APK (${{ needs.build.outputs.apk_size }})</a></li>
             </ul>
-            <p class='note'>Built automatically from the <code>master</code> branch.</p>
+            <p class='note'>Built from the selected branch.</p>
           </body>
           </html>" > ./public/index.html
 
-      - name: Upload to GitHub Pages
+      - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
@@ -150,6 +155,5 @@ jobs:
     environment:
       name: github-pages
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - name: Deploy GitHub Pages site
         uses: actions/deploy-pages@v4
