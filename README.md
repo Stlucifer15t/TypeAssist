@@ -84,7 +84,7 @@ Type your text followed by a trigger to process it.
 
 ## 🧪 Preview Builds
 
-Want to try a test build? Open a successful pull-request run in GitHub Actions and download the `PromptAI-test-debug-*` artifact. It is debug-signed for testing; tagged Full releases are signed with the Android release key when the required GitHub Actions secrets are configured.
+Want to try a signed test build? In GitHub Actions, run **Prompt AI Preview Build & Deploy** to build the Full APK. Tagged Full releases are also signed with the Android release key when the required GitHub Actions secrets are configured.
 
 [![Download Preview Builds](https://img.shields.io/badge/Download-Preview%20Builds-red?style=for-the-badge)](https://github.com/Stlucifer15t/TypeAssist/actions)
 
