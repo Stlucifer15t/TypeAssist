@@ -24,7 +24,6 @@ import com.typeassist.app.data.AppConfig
 class OverlayManager(private val context: Context) {
 
     private var windowManager: WindowManager? = null
-    
     private var loadingView: View? = null
     private var undoView: FrameLayout? = null
     private var previewView: FrameLayout? = null 
@@ -88,14 +87,6 @@ class OverlayManager(private val context: Context) {
         loadingAnimators.clear()
     }
 
-    private fun roundedBg(color: Int, radiusF: Float, strokeColor: Int? = null, strokeW: Int = 0): GradientDrawable {
-        return GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = radiusF
-            if (strokeColor != null) setStroke(strokeW, strokeColor)
-        }
-    }
-
     private fun circleDrawable(color: Int): GradientDrawable {
         return GradientDrawable().apply {
             shape = GradientDrawable.OVAL
@@ -103,13 +94,25 @@ class OverlayManager(private val context: Context) {
         }
     }
 
+    private fun dotWithShadow(color: Int, withShadow: Boolean = true): View {
+        return View(context).apply {
+            background = circleDrawable(color)
+            if (withShadow) {
+                elevation = dpF(3f)
+            }
+        }
+    }
+
+    // No background - immersive, just floating indicator
     private fun createClassicView(): View {
         val container = FrameLayout(context).apply {
-            setPadding(30, 30, 30, 30)
-            background = roundedBg(0x99000000.toInt(), 40f)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            // No background - transparent
         }
         val progressBar = ProgressBar(context).apply {
             indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            // Add subtle shadow via elevation on parent? ProgressBar itself
+            elevation = dpF(4f)
         }
         container.addView(progressBar)
         return container
@@ -119,19 +122,19 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(22), dp(16), dp(22), dp(16))
-            background = roundedBg(0xEE1E1E1E.toInt(), dpF(28f), 0x33FFFFFF, dp(1))
-            elevation = dpF(8f)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            // No background - immersive
         }
         repeat(3) { index ->
             val dot = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(12), dp(12)).apply {
-                    setMargins(dp(5), 0, dp(5), 0)
+                layoutParams = LinearLayout.LayoutParams(dp(10), dp(10)).apply {
+                    setMargins(dp(4), 0, dp(4), 0)
                 }
                 background = circleDrawable(Color.WHITE)
+                elevation = dpF(6f)
             }
             container.addView(dot)
-            val anim = ObjectAnimator.ofFloat(dot, View.ALPHA, 0.25f, 1f).apply {
+            val anim = ObjectAnimator.ofFloat(dot, View.ALPHA, 0.3f, 1f).apply {
                 duration = 600
                 startDelay = (index * 180L)
                 repeatCount = ValueAnimator.INFINITE
@@ -140,14 +143,14 @@ class OverlayManager(private val context: Context) {
                 start()
             }
             loadingAnimators.add(anim)
-            val scaleX = ObjectAnimator.ofFloat(dot, View.SCALE_X, 0.7f, 1.15f).apply {
+            val scaleX = ObjectAnimator.ofFloat(dot, View.SCALE_X, 0.7f, 1.2f).apply {
                 duration = 600
                 startDelay = (index * 180L)
                 repeatCount = ValueAnimator.INFINITE
                 repeatMode = ValueAnimator.REVERSE
                 start()
             }
-            val scaleY = ObjectAnimator.ofFloat(dot, View.SCALE_Y, 0.7f, 1.15f).apply {
+            val scaleY = ObjectAnimator.ofFloat(dot, View.SCALE_Y, 0.7f, 1.2f).apply {
                 duration = 600
                 startDelay = (index * 180L)
                 repeatCount = ValueAnimator.INFINITE
@@ -162,49 +165,47 @@ class OverlayManager(private val context: Context) {
 
     private fun createPulseView(): View {
         val container = FrameLayout(context).apply {
-            setPadding(dp(24), dp(24), dp(24), dp(24))
-            background = roundedBg(0xEE1E1E1E.toInt(), dpF(28f), 0xFF4F46E5.toInt(), dp(2))
-            elevation = dpF(10f)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         val outer = FrameLayout(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(56), dp(56), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER)
             background = circleDrawable(0x334F46E5)
         }
         val inner = View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)
             background = circleDrawable(Color.WHITE)
-            elevation = dpF(4f)
+            elevation = dpF(8f)
         }
         container.addView(outer)
         container.addView(inner)
 
-        val pulseScaleX = ObjectAnimator.ofFloat(inner, View.SCALE_X, 0.8f, 1.35f).apply {
+        val pulseScaleX = ObjectAnimator.ofFloat(inner, View.SCALE_X, 0.85f, 1.4f).apply {
             duration = 900
             repeatCount = ValueAnimator.INFINITE
             repeatMode = ValueAnimator.REVERSE
             interpolator = AccelerateDecelerateInterpolator()
             start()
         }
-        val pulseScaleY = ObjectAnimator.ofFloat(inner, View.SCALE_Y, 0.8f, 1.35f).apply {
+        val pulseScaleY = ObjectAnimator.ofFloat(inner, View.SCALE_Y, 0.85f, 1.4f).apply {
             duration = 900
             repeatCount = ValueAnimator.INFINITE
             repeatMode = ValueAnimator.REVERSE
             interpolator = AccelerateDecelerateInterpolator()
             start()
         }
-        val outerScaleX = ObjectAnimator.ofFloat(outer, View.SCALE_X, 0.8f, 1.5f).apply {
+        val outerScaleX = ObjectAnimator.ofFloat(outer, View.SCALE_X, 0.9f, 1.6f).apply {
             duration = 1200
             repeatCount = ValueAnimator.INFINITE
             repeatMode = ValueAnimator.REVERSE
             start()
         }
-        val outerScaleY = ObjectAnimator.ofFloat(outer, View.SCALE_Y, 0.8f, 1.5f).apply {
+        val outerScaleY = ObjectAnimator.ofFloat(outer, View.SCALE_Y, 0.9f, 1.6f).apply {
             duration = 1200
             repeatCount = ValueAnimator.INFINITE
             repeatMode = ValueAnimator.REVERSE
             start()
         }
-        val outerAlpha = ObjectAnimator.ofFloat(outer, View.ALPHA, 0.9f, 0.2f).apply {
+        val outerAlpha = ObjectAnimator.ofFloat(outer, View.ALPHA, 0.8f, 0.15f).apply {
             duration = 1200
             repeatCount = ValueAnimator.INFINITE
             repeatMode = ValueAnimator.REVERSE
@@ -218,23 +219,22 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(20), dp(18), dp(20), dp(18))
-            background = roundedBg(0xEE1E1E1E.toInt(), dpF(24f), 0x33FFFFFF, dp(1))
-            elevation = dpF(8f)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         repeat(3) { index ->
             val bar = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(6), dp(22)).apply {
-                    setMargins(dp(4), 0, dp(4), 0)
+                layoutParams = LinearLayout.LayoutParams(dp(5), dp(18)).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
                     gravity = Gravity.BOTTOM
                 }
                 background = GradientDrawable().apply {
                     setColor(Color.WHITE)
-                    cornerRadius = dpF(3f)
+                    cornerRadius = dpF(2.5f)
                 }
+                elevation = dpF(4f)
             }
             container.addView(bar)
-            val anim = ObjectAnimator.ofFloat(bar, View.SCALE_Y, 0.4f, 1.6f).apply {
+            val anim = ObjectAnimator.ofFloat(bar, View.SCALE_Y, 0.35f, 1.5f).apply {
                 duration = 500
                 startDelay = (index * 150L)
                 repeatCount = ValueAnimator.INFINITE
@@ -251,19 +251,18 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(22), dp(14), dp(22), dp(14))
-            background = roundedBg(0xFF2A2A2E.toInt(), dpF(28f), 0xFF4F46E5.toInt(), dp(2))
-            elevation = dpF(8f)
+            setPadding(dp(6), dp(6), dp(6), dp(6))
         }
         repeat(3) { index ->
             val dot = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(10), dp(10)).apply {
-                    setMargins(dp(4), 0, dp(4), 0)
+                layoutParams = LinearLayout.LayoutParams(dp(8), dp(8)).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
                 }
-                background = circleDrawable(0xFF818CF8.toInt())
+                background = circleDrawable(Color.WHITE)
+                elevation = dpF(5f)
             }
             container.addView(dot)
-            val anim = ObjectAnimator.ofFloat(dot, View.TRANSLATION_Y, 0f, -dpF(8f)).apply {
+            val anim = ObjectAnimator.ofFloat(dot, View.TRANSLATION_Y, 0f, -dpF(7f)).apply {
                 duration = 380
                 startDelay = (index * 120L)
                 repeatCount = ValueAnimator.INFINITE
@@ -280,21 +279,21 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(18), dp(12), dp(20), dp(12))
-            background = roundedBg(0xEE1E1E1E.toInt(), dpF(50f), 0xFF4F46E5.toInt(), dp(2))
-            elevation = dpF(10f)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         val progress = ProgressBar(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(18), dp(18)).apply {
-                setMargins(0, 0, dp(12), 0)
+            layoutParams = LinearLayout.LayoutParams(dp(16), dp(16)).apply {
+                setMargins(0, 0, dp(8), 0)
             }
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF818CF8.toInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            elevation = dpF(4f)
         }
         val text = TextView(context).apply {
-            this.text = "AI thinking..."
-            textSize = 13f
+            this.text = "Thinking..."
+            textSize = 12f
             setTextColor(Color.WHITE)
             setTypeface(null, android.graphics.Typeface.BOLD)
+            setShadowLayer(dpF(4f), 0f, 0f, Color.BLACK)
         }
         container.addView(progress)
         container.addView(text)
@@ -303,18 +302,18 @@ class OverlayManager(private val context: Context) {
 
     private fun createNeonRingView(): View {
         val container = FrameLayout(context).apply {
-            setPadding(dp(20), dp(20), dp(20), dp(20))
-            background = roundedBg(0xDD111113.toInt(), dpF(32f), 0xFF818CF8.toInt(), dp(1))
-            elevation = dpF(12f)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
         }
         val ring = ProgressBar(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER)
             isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(0xFF818CF8.toInt())
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            elevation = dpF(4f)
         }
         val dot = View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(10), dp(10), Gravity.CENTER)
+            layoutParams = FrameLayout.LayoutParams(dp(8), dp(8), Gravity.CENTER)
             background = circleDrawable(Color.WHITE)
+            elevation = dpF(6f)
         }
         container.addView(ring)
         container.addView(dot)

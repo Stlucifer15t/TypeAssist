@@ -1130,6 +1130,7 @@ private data class LoadingStyleOption(
     val description: String
 )
 
+
 @Composable
 private fun LoadingStylePreview(styleId: String) {
     val primary = Color(0xFF818CF8)
@@ -1137,10 +1138,7 @@ private fun LoadingStylePreview(styleId: String) {
     when (styleId) {
         "classic" -> {
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0x99000000))
-                    .padding(14.dp)
+                modifier = Modifier.padding(14.dp)
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(22.dp),
@@ -1152,11 +1150,7 @@ private fun LoadingStylePreview(styleId: String) {
         "dots" -> {
             val infinite = rememberInfiniteTransition(label = "dots")
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color(0xEE1E1E1E))
-                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(28.dp))
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1211,11 +1205,7 @@ private fun LoadingStylePreview(styleId: String) {
                 label = "outerAlpha"
             )
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color(0xEE1E1E1E))
-                    .border(2.dp, primary, RoundedCornerShape(28.dp))
-                    .padding(18.dp),
+                modifier = Modifier.padding(8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -1228,7 +1218,7 @@ private fun LoadingStylePreview(styleId: String) {
                 )
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(20.dp)
                         .scale(scale)
                         .clip(CircleShape)
                         .background(white)
@@ -1238,10 +1228,7 @@ private fun LoadingStylePreview(styleId: String) {
         "bars" -> {
             val infinite = rememberInfiniteTransition(label = "bars")
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xEE1E1E1E))
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalAlignment = Alignment.Bottom
             ) {
@@ -1257,8 +1244,8 @@ private fun LoadingStylePreview(styleId: String) {
                     )
                     Box(
                         modifier = Modifier
-                            .width(6.dp)
-                            .height(18.dp)
+                            .width(5.dp)
+                            .height(16.dp)
                             .scale(scaleX = 1f, scaleY = scale)
                             .clip(RoundedCornerShape(3.dp))
                             .background(white)
@@ -1269,11 +1256,7 @@ private fun LoadingStylePreview(styleId: String) {
         "typing" -> {
             val infinite = rememberInfiniteTransition(label = "typing")
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(Color(0xFF2A2A2E))
-                    .border(2.dp, primary, RoundedCornerShape(28.dp))
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1290,61 +1273,44 @@ private fun LoadingStylePreview(styleId: String) {
                     Box(
                         modifier = Modifier
                             .offset(y = offset.dp)
-                            .size(9.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
-                            .background(primary)
+                            .background(white)
                     )
                 }
             }
         }
         "pill" -> {
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50.dp))
-                    .background(Color(0xEE1E1E1E))
-                    .border(2.dp, primary, RoundedCornerShape(50.dp))
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    color = primary,
+                    modifier = Modifier.size(14.dp),
+                    color = white,
                     strokeWidth = 2.dp
                 )
-                Text("AI thinking…", color = white, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                Text("Thinking...", color = white, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
             }
         }
         "neon" -> {
-            val infinite = rememberInfiniteTransition(label = "neon")
-            val rotation by infinite.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing)),
-                label = "rotation"
-            )
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color(0xDD111113))
-                    .border(1.dp, primary, RoundedCornerShape(32.dp))
-                    .padding(16.dp),
+                modifier = Modifier.padding(4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(28.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Use simple CircularProgressIndicator with rotation illusion
                     CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(32.dp),
-                        color = primary,
-                        strokeWidth = 3.dp
+                        modifier = Modifier.size(28.dp),
+                        color = white,
+                        strokeWidth = 2.5.dp
                     )
                     Box(
                         modifier = Modifier
-                            .size(8.dp)
+                            .size(6.dp)
                             .clip(CircleShape)
                             .background(white)
                     )
@@ -1353,3 +1319,4 @@ private fun LoadingStylePreview(styleId: String) {
         }
     }
 }
+
