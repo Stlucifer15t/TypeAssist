@@ -36,9 +36,18 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Full release variant
-        run: ./gradlew assembleFullRelease --stacktrace
+        run: ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
 
       - name: Upload Full APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: PromptAI-Full-unsigned
