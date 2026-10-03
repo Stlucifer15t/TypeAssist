@@ -334,7 +334,7 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
     // Gemini States
     var geminiKey by remember { mutableStateOf(config.apiKey) }
     var geminiModel by remember { mutableStateOf(config.model) }
-    var geminiModels by remember { mutableStateOf(config.cachedGeminiModels ?: mutableListOf()) }
+    var geminiModels by remember { mutableStateOf<List<String>>(config.cachedGeminiModels ?: mutableListOf()) }
     var isFetchingGeminiModels by remember { mutableStateOf(false) }
     var geminiModelsError by remember { mutableStateOf<String?>(null) }
     
@@ -342,7 +342,7 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
     var cfAccountId by remember { mutableStateOf(config.cloudflareConfig.accountId) }
     var cfApiToken by remember { mutableStateOf(config.cloudflareConfig.apiToken) }
     var cfModel by remember { mutableStateOf(config.cloudflareConfig.model) }
-    var cfModels by remember { mutableStateOf(config.cloudflareConfig.cachedModels ?: mutableListOf()) }
+    var cfModels by remember { mutableStateOf<List<String>>(config.cloudflareConfig.cachedModels ?: mutableListOf()) }
     var isFetchingCfModels by remember { mutableStateOf(false) }
     var cfModelsError by remember { mutableStateOf<String?>(null) }
 
@@ -350,7 +350,7 @@ fun AiProviderSettingsTab(config: AppConfig, client: OkHttpClient, onSave: (AppC
     var customBaseUrl by remember { mutableStateOf(config.customApiConfig.baseUrl) }
     var customApiKey by remember { mutableStateOf(config.customApiConfig.apiKey) }
     var customModel by remember { mutableStateOf(config.customApiConfig.model) }
-    var customModels by remember { mutableStateOf(config.customApiConfig.cachedModels ?: mutableListOf()) }
+    var customModels by remember { mutableStateOf<List<String>>(config.customApiConfig.cachedModels ?: mutableListOf()) }
     var isFetchingCustomModels by remember { mutableStateOf(false) }
     var customModelsError by remember { mutableStateOf<String?>(null) }
 
