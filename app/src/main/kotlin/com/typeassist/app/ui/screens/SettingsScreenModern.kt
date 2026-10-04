@@ -87,6 +87,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -1587,7 +1588,7 @@ private fun LoadingStylePreview(
                     val arcSize = Size(size.width - inset * 2f, size.height - inset * 2f)
                     val topLeft = Offset(inset, inset)
 
-                    withTransform({ rotate(degrees = spin) }) {
+                    rotate(degrees = spin) {
                         // Soft halo bleeding out from the lit part of the tube.
                         drawArc(
                             color = color.copy(alpha = 0.16f * glow),
