@@ -57,8 +57,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ ! -f app/build/outputs/apk/full/release/app-full-release-unsigned.apk ]; then
-            tail -c 5000 build.log > /tmp/tail.txt || true
-            jq -Rs '{body: ("CI build log tail\n```\n" + . + "\n```")}' /tmp/tail.txt > /tmp/payload.json
+            { grep -E "e: |error:|warning: " build.log | head -80; echo ---; tail -c 1500 build.log; } > /tmp/tail.txt || true
+            jq -Rs '{body: ("CI compile errors\n```\n" + . + "\n```")}' /tmp/tail.txt > /tmp/payload.json
             gh api --method POST "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" --input /tmp/payload.json || true
           fi
 
