@@ -11,6 +11,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.pull_request.number || '' }}
   cancel-in-progress: true
 
+# TEMPORARY (removed once build is green): lets the diagnostic step post a commit comment.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
