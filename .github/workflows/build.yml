@@ -11,10 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.pull_request.number || '' }}
   cancel-in-progress: true
 
-# TEMPORARY (removed once build is green): lets the diagnostic step post a commit comment.
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,23 +45,6 @@ jobs:
           name: build-log
           path: build.log
           if-no-files-found: warn
-
-      # TEMPORARY DIAGNOSTIC (removed once build is green): sandbox cannot read artifact blobs.
-      - name: Publish build diagnostics
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          {
-            echo "== apk outputs =="
-            ls -R app/build/outputs/apk 2>/dev/null || echo "(no apk dir)"
-            echo "== kotlinc errors =="
-            grep -E "^e: |error:" build.log | head -60 || echo "(none)"
-            echo "== result =="
-            grep -E "BUILD (SUCCESSFUL|FAILED)" build.log || true
-          } > /tmp/tail.txt
-          jq -Rs '{body: ("CI diagnostics\n```\n" + . + "\n```")}' /tmp/tail.txt > /tmp/payload.json
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" --input /tmp/payload.json || true
 
       - name: Upload Full APK artifact
         if: success()
