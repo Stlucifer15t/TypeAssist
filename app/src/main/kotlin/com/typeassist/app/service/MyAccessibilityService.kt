@@ -22,6 +22,7 @@ import com.typeassist.app.api.GeminiApiClient
 import com.typeassist.app.api.LocalLlmClient
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.HistoryManager
+import com.typeassist.app.data.LoadingIndicatorStyle
 import okhttp3.*
 import java.util.regex.Pattern
 import android.util.Log
@@ -157,6 +158,9 @@ class MyAccessibilityService : AccessibilityService() {
             try {
                 val gson = com.google.gson.GsonBuilder().create()
                 val config = gson.fromJson(configJson, AppConfig::class.java)
+                // Gson skips constructors, so a config saved before the indicator colour/size
+                // existed arrives with 0 for both. Restore the real defaults.
+                LoadingIndicatorStyle.sanitize(config)
                 
                 // Migration: Convert old single content to contents list
                 config.snippets?.forEach { snippet ->

@@ -32,8 +32,11 @@
   - `Bars` - Equalizer bars
   - `Typing` - iMessage-style typing bubble
   - `Pill` - Rounded pill with "AI thinking..."
-  - `Neon ring` - Glowing ring loader
+  - `Neon ring` - Glowing neon tube that sweeps the ring: faded trail, soft halo, bright leading head and a breathing glow
   - Live preview in settings + fully animated overlay via `OverlayManager`
+- **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style, including the neon ring's glow.
+- **📏 Indicator Size** — Settings → General → *Indicator size*: 50%–200% slider that scales the whole overlay indicator (100% is the original size).
+- Both settings live in `AppConfig` (`loadingIndicatorColor`, `loadingIndicatorSizePercent`) and are backward compatible: configs saved before them fall back to white / 100%.
 - **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) now only **build Full APK and upload unsigned artifact** (`app-full-release-unsigned.apk`). No `SIGNING_KEY_*` secrets required — download artifact and sign with MT Manager.
 - **🧹 UI Cleanup** — Removed `Support development` (Binance/USDT) section, `Twitter`, and `Telegram community` links from Home screen. `Made with care` now only shows **Source code on GitHub → https://github.com/Stlucifer15t/TypeAssist**
 - **⚙️ Config** — Added `loadingIndicatorStyle` to `AppConfig` with backward-compatible fallback.
