@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.createDefaultConfig
 import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.ui.screens.*
@@ -42,6 +43,7 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
             if (json != null) {
                 val loadedConfig = gson.fromJson(json, AppConfig::class.java)
                 // Handle missing fields from older versions
+                LoadingIndicatorStyle.sanitize(loadedConfig)
                 if (loadedConfig.savedCustomConfigs == null) loadedConfig.savedCustomConfigs = mutableListOf()
                 if (loadedConfig.savedGeminiConfigs == null) loadedConfig.savedGeminiConfigs = mutableListOf()
                 if (loadedConfig.savedCloudflareConfigs == null) loadedConfig.savedCloudflareConfigs = mutableListOf()

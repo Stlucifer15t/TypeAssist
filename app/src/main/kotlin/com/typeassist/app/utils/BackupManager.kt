@@ -3,6 +3,7 @@ package com.typeassist.app.utils
 import android.content.Context
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.LoadingIndicatorStyle
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -137,7 +138,7 @@ object BackupManager {
         val jsonBytes = decompress(plainBytes)
         val json = String(jsonBytes, StandardCharsets.UTF_8)
         
-        return Pair(gson.fromJson(json, AppConfig::class.java), false)
+        return Pair(LoadingIndicatorStyle.sanitize(gson.fromJson(json, AppConfig::class.java)), false)
     }
     
     // Check if file is encrypted without decrypting

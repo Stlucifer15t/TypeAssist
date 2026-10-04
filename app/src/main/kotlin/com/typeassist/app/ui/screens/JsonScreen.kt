@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.utils.BackupManager
 import kotlinx.coroutines.launch
 import com.typeassist.app.ui.components.PageHeading
@@ -177,7 +178,7 @@ fun JsonScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () -> Uni
             Row(modifier = Modifier.padding(top = 16.dp)) {
                 Button(onClick = { val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager; cm.setPrimaryClip(ClipData.newPlainText("Config", txt)); Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show() }, modifier = Modifier.weight(1f)) { Text("Copy JSON") }
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { try { onSave(gson.fromJson(txt, AppConfig::class.java)); onBack() } catch(e:Exception){ Toast.makeText(context, "Invalid JSON", Toast.LENGTH_SHORT).show() } }, modifier = Modifier.weight(1f)) { Text("Apply JSON") }
+                Button(onClick = { try { onSave(LoadingIndicatorStyle.sanitize(gson.fromJson(txt, AppConfig::class.java))); onBack() } catch(e:Exception){ Toast.makeText(context, "Invalid JSON", Toast.LENGTH_SHORT).show() } }, modifier = Modifier.weight(1f)) { Text("Apply JSON") }
             }
         }
     }

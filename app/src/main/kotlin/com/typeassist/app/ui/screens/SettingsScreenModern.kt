@@ -11,9 +11,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
@@ -66,6 +69,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,7 +81,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -92,6 +103,7 @@ import com.typeassist.app.api.ModelCatalogClient
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.CloudflareConfig
 import com.typeassist.app.data.CustomApiConfig
+import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.SavedGeminiConfig
 import com.typeassist.app.data.repository.UpdateRepository
@@ -101,6 +113,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import kotlin.coroutines.coroutineContext
+import kotlin.math.cos
+import kotlin.math.sin
 
 private data class ConnectionTestResult(
     val succeeded: Boolean,
@@ -211,6 +225,12 @@ private fun GeneralSettingsTabModern(
     var enableUndoOverlay by remember(config.enableUndoOverlay) { mutableStateOf(config.enableUndoOverlay) }
     var enableLoadingOverlay by remember(config.enableLoadingOverlay) { mutableStateOf(config.enableLoadingOverlay) }
     var loadingStyle by remember(config.loadingIndicatorStyle) { mutableStateOf(config.loadingIndicatorStyle.ifBlank { "classic" }) }
+    var indicatorColor by remember(config.loadingIndicatorColor) {
+        mutableIntStateOf(LoadingIndicatorStyle.sanitizeColor(config.loadingIndicatorColor))
+    }
+    var indicatorSize by remember(config.loadingIndicatorSizePercent) {
+        mutableIntStateOf(LoadingIndicatorStyle.sanitizeSizePercent(config.loadingIndicatorSizePercent))
+    }
     var allowTriggerAnywhere by remember(config.allowTriggerAnywhere) { mutableStateOf(config.allowTriggerAnywhere) }
     var ignorePrecedingWhitespace by remember(config.ignorePrecedingWhitespace) { mutableStateOf(config.ignorePrecedingWhitespace) }
     var globalTriggerPattern by remember(config.globalTriggerPattern) { mutableStateOf(config.globalTriggerPattern) }
@@ -315,18 +335,75 @@ private fun GeneralSettingsTabModern(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(12.dp))
+                    val previewScale = indicatorSize / 100f
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(90.dp)
+                            .height((90f * previewScale).coerceIn(90f, 200f).dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(Color(0xFF121212)),
                         contentAlignment = Alignment.Center
                     ) {
-                        LoadingStylePreview(styleId = loadingStyle)
+                        LoadingStylePreview(
+                            styleId = loadingStyle,
+                            color = Color(indicatorColor),
+                            scale = previewScale
+                        )
                     }
                 }
             }
+        }
+    }
+
+    if (enableLoadingOverlay) {
+        IndicatorColorSection(
+            color = indicatorColor,
+            onColorChange = { picked ->
+                val safe = LoadingIndicatorStyle.ensureOpaque(picked)
+                indicatorColor = safe
+                onSave(config.copy(loadingIndicatorColor = safe))
+            }
+        )
+
+        ModernSettingsSection(
+            title = "Indicator size",
+            description = "Make the floating indicator easier or harder to notice."
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Small",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "$indicatorSize%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Large",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Slider(
+                value = indicatorSize.toFloat(),
+                onValueChange = { indicatorSize = it.toInt() },
+                onValueChangeFinished = {
+                    onSave(config.copy(loadingIndicatorSizePercent = indicatorSize))
+                },
+                valueRange = LoadingIndicatorStyle.MIN_SIZE_PERCENT.toFloat()..LoadingIndicatorStyle.MAX_SIZE_PERCENT.toFloat(),
+                steps = 14
+            )
+            Text(
+                "100% is the original size. Applies to every style.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 
@@ -1124,199 +1201,445 @@ private fun SavedProviderRow(
     }
 }
 
+/**
+ * Settings section for picking the colour of the floating loading indicator: quick presets,
+ * a hex field for any colour at all, and an HSV mixer for fine tuning.
+ */
+@Composable
+private fun IndicatorColorSection(
+    color: Int,
+    onColorChange: (Int) -> Unit
+) {
+    var mixerVisible by remember { mutableStateOf(false) }
+    var hexDraft by remember(color) { mutableStateOf(LoadingIndicatorStyle.toHexRgb(color)) }
+
+    ModernSettingsSection(
+        title = "Indicator colour",
+        description = "Choose any colour for the floating loading indicator."
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(color))
+                    .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            )
+            Column {
+                Text("Current colour", fontWeight = FontWeight.SemiBold)
+                Text(
+                    hexDraft.uppercase(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Quick picks",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            LoadingIndicatorStyle.PRESET_COLORS.forEach { preset ->
+                val selected = preset == color
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(Color(preset))
+                        .then(
+                            if (selected) {
+                                Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            } else {
+                                Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                            }
+                        )
+                        .clickable { onColorChange(preset) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Selected colour",
+                            tint = Color(LoadingIndicatorStyle.contrastColor(preset)),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        val hexIsValid = LoadingIndicatorStyle.parseHexColor(hexDraft) != null
+        OutlinedTextField(
+            value = hexDraft,
+            onValueChange = { typed ->
+                hexDraft = typed
+                LoadingIndicatorStyle.parseHexColor(typed)?.let { onColorChange(it) }
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+            label = { Text("Any colour (hex)") },
+            supportingText = {
+                Text(
+                    if (hexIsValid) "Applied to the indicator"
+                    else "Format: #RRGGBB, for example #22D3EE"
+                )
+            },
+            isError = hexDraft.isNotBlank() && !hexIsValid,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { mixerVisible = !mixerVisible }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Mix a custom colour", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Slide hue, saturation and brightness.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                if (mixerVisible) "Hide" else "Show",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        if (mixerVisible) {
+            val hsv = remember(color) {
+                FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
+            }
+            var hue by remember(hsv) { mutableFloatStateOf(hsv[0]) }
+            var saturation by remember(hsv) { mutableFloatStateOf(hsv[1]) }
+            var brightness by remember(hsv) { mutableFloatStateOf(hsv[2]) }
+
+            fun applyMixer() {
+                onColorChange(
+                    android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                Color.Red, Color.Yellow, Color.Green, Color.Cyan,
+                                Color.Blue, Color.Magenta, Color.Red
+                            )
+                        )
+                    )
+            )
+            Text(
+                "Hue ${hue.toInt()}°",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = hue,
+                onValueChange = { hue = it; applyMixer() },
+                valueRange = 0f..360f
+            )
+            Text(
+                "Saturation ${(saturation * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = saturation,
+                onValueChange = { saturation = it; applyMixer() },
+                valueRange = 0f..1f
+            )
+            Text(
+                "Brightness ${(brightness * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Slider(
+                value = brightness,
+                onValueChange = { brightness = it; applyMixer() },
+                valueRange = 0f..1f
+            )
+        }
+    }
+}
+
 private data class LoadingStyleOption(
     val id: String,
     val name: String,
     val description: String
 )
 
-
 @Composable
-private fun LoadingStylePreview(styleId: String) {
-    val primary = Color(0xFF818CF8)
-    val white = Color.White
-    when (styleId) {
-        "classic" -> {
-            Box(
-                modifier = Modifier.padding(14.dp)
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    color = white,
-                    strokeWidth = 2.5.dp
-                )
-            }
-        }
-        "dots" -> {
-            val infinite = rememberInfiniteTransition(label = "dots")
-            Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(3) { i ->
-                    val scale by infinite.animateFloat(
-                        initialValue = 0.6f,
-                        targetValue = 1.2f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(600, delayMillis = i * 180, easing = FastOutSlowInEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "dotScale$i"
-                    )
-                    val alpha by infinite.animateFloat(
-                        initialValue = 0.3f,
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(600, delayMillis = i * 180),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "dotAlpha$i"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .scale(scale)
-                            .alpha(alpha)
-                            .clip(CircleShape)
-                            .background(white)
-                    )
-                }
-            }
-        }
-        "pulse" -> {
-            val infinite = rememberInfiniteTransition(label = "pulse")
-            val scale by infinite.animateFloat(
-                initialValue = 0.8f,
-                targetValue = 1.35f,
-                animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-                label = "pulseScale"
-            )
-            val outerScale by infinite.animateFloat(
-                initialValue = 0.9f,
-                targetValue = 1.6f,
-                animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
-                label = "outerScale"
-            )
-            val outerAlpha by infinite.animateFloat(
-                initialValue = 0.8f,
-                targetValue = 0.15f,
-                animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
-                label = "outerAlpha"
-            )
-            Box(
-                modifier = Modifier.padding(8.dp),
-                contentAlignment = Alignment.Center
-            ) {
+private fun LoadingStylePreview(
+    styleId: String,
+    color: Color = Color.White,
+    scale: Float = 1f
+) {
+    val primary = color
+    val white = color
+    Box(
+        modifier = Modifier.scale(scale),
+        contentAlignment = Alignment.Center
+    ) {
+        when (styleId) {
+            "classic" -> {
                 Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .scale(outerScale)
-                        .alpha(outerAlpha)
-                        .clip(CircleShape)
-                        .background(primary.copy(alpha = 0.35f))
-                )
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .scale(scale)
-                        .clip(CircleShape)
-                        .background(white)
-                )
-            }
-        }
-        "bars" -> {
-            val infinite = rememberInfiniteTransition(label = "bars")
-            Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                repeat(3) { i ->
-                    val scale by infinite.animateFloat(
-                        initialValue = 0.4f,
-                        targetValue = 1.7f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(500, delayMillis = i * 130, easing = FastOutSlowInEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "bar$i"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(5.dp)
-                            .height(16.dp)
-                            .scale(scaleX = 1f, scaleY = scale)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(white)
-                    )
-                }
-            }
-        }
-        "typing" -> {
-            val infinite = rememberInfiniteTransition(label = "typing")
-            Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(3) { i ->
-                    val offset by infinite.animateFloat(
-                        initialValue = 0f,
-                        targetValue = -8f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(380, delayMillis = i * 110, easing = FastOutSlowInEasing),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "typingOffset$i"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .offset(y = offset.dp)
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(white)
-                    )
-                }
-            }
-        }
-        "pill" -> {
-            Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    color = white,
-                    strokeWidth = 2.dp
-                )
-                Text("Thinking...", color = white, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            }
-        }
-        "neon" -> {
-            Box(
-                modifier = Modifier.padding(4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier.size(28.dp),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier.padding(14.dp)
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(22.dp),
                         color = white,
                         strokeWidth = 2.5.dp
                     )
+                }
+            }
+            "dots" -> {
+                val infinite = rememberInfiniteTransition(label = "dots")
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(3) { i ->
+                        val scaleAnim by infinite.animateFloat(
+                            initialValue = 0.6f,
+                            targetValue = 1.2f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(600, delayMillis = i * 180, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "dotScale$i"
+                        )
+                        val alpha by infinite.animateFloat(
+                            initialValue = 0.3f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(600, delayMillis = i * 180),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "dotAlpha$i"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .scale(scaleAnim)
+                                .alpha(alpha)
+                                .clip(CircleShape)
+                                .background(white)
+                        )
+                    }
+                }
+            }
+            "pulse" -> {
+                val infinite = rememberInfiniteTransition(label = "pulse")
+                val scaleAnim by infinite.animateFloat(
+                    initialValue = 0.8f,
+                    targetValue = 1.35f,
+                    animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                    label = "pulseScale"
+                )
+                val outerScale by infinite.animateFloat(
+                    initialValue = 0.9f,
+                    targetValue = 1.6f,
+                    animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
+                    label = "outerScale"
+                )
+                val outerAlpha by infinite.animateFloat(
+                    initialValue = 0.8f,
+                    targetValue = 0.15f,
+                    animationSpec = infiniteRepeatable(tween(1200), RepeatMode.Reverse),
+                    label = "outerAlpha"
+                )
+                Box(
+                    modifier = Modifier.padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(44.dp)
+                            .scale(outerScale)
+                            .alpha(outerAlpha)
+                            .clip(CircleShape)
+                            .background(primary.copy(alpha = 0.2f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .scale(scaleAnim)
                             .clip(CircleShape)
                             .background(white)
                     )
+                }
+            }
+            "bars" -> {
+                val infinite = rememberInfiniteTransition(label = "bars")
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    repeat(3) { i ->
+                        val scaleAnim by infinite.animateFloat(
+                            initialValue = 0.4f,
+                            targetValue = 1.7f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(500, delayMillis = i * 130, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "bar$i"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(5.dp)
+                                .height(16.dp)
+                                .scale(scaleX = 1f, scaleY = scaleAnim)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(white)
+                        )
+                    }
+                }
+            }
+            "typing" -> {
+                val infinite = rememberInfiniteTransition(label = "typing")
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(3) { i ->
+                        val offset by infinite.animateFloat(
+                            initialValue = 0f,
+                            targetValue = -8f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(380, delayMillis = i * 110, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "typingOffset$i"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .offset(y = offset.dp)
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(white)
+                        )
+                    }
+                }
+            }
+            "pill" -> {
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        color = white,
+                        strokeWidth = 2.dp
+                    )
+                    Text("Thinking...", color = white, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                }
+            }
+            "neon" -> {
+                val infinite = rememberInfiniteTransition(label = "neon")
+                val spin by infinite.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing)),
+                    label = "neonSpin"
+                )
+                val glow by infinite.animateFloat(
+                    initialValue = 0.55f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                    label = "neonGlow"
+                )
+                val corePulse by infinite.animateFloat(
+                    initialValue = 0.75f,
+                    targetValue = 1.25f,
+                    animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+                    label = "neonCore"
+                )
+                val coreColor = Color(LoadingIndicatorStyle.contrastColor(color.toArgb()))
+                val sweepAngle = 300f
+                Canvas(modifier = Modifier.size(34.dp)) {
+                    val stroke = size.minDimension / 12f
+                    val inset = stroke * 3f
+                    val arcSize = Size(size.width - inset * 2f, size.height - inset * 2f)
+                    val topLeft = Offset(inset, inset)
+
+                    rotate(degrees = spin) {
+                        // Soft halo bleeding out from the lit part of the tube.
+                        drawArc(
+                            color = color.copy(alpha = 0.16f * glow),
+                            startAngle = 0f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke * 3f, cap = StrokeCap.Round)
+                        )
+                        // Dim track the light travels along.
+                        drawArc(
+                            color = color.copy(alpha = 0.17f),
+                            startAngle = 0f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke)
+                        )
+                        // The lit tube, with a tail that fades out.
+                        drawArc(
+                            brush = Brush.sweepGradient(
+                                0f to color.copy(alpha = 0f),
+                                0.3f to color.copy(alpha = 0.35f),
+                                0.85f to color,
+                                1f to color,
+                                center = center
+                            ),
+                            startAngle = 0f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke, cap = StrokeCap.Round)
+                        )
+                        // Bright leading head.
+                        val radians = Math.toRadians(sweepAngle.toDouble())
+                        val radius = arcSize.width / 2f
+                        drawCircle(
+                            color = coreColor,
+                            radius = stroke * 0.8f,
+                            center = Offset(
+                                center.x + radius * cos(radians).toFloat(),
+                                center.y + radius * sin(radians).toFloat()
+                            )
+                        )
+                    }
+                    drawCircle(color = coreColor, radius = stroke * 1.1f * corePulse, center = center)
                 }
             }
         }
     }
 }
-

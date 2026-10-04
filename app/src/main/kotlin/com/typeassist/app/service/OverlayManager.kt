@@ -4,8 +4,12 @@ import android.animation.Animator
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.RectF
+import android.graphics.SweepGradient
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
@@ -13,6 +17,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -20,6 +25,9 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.LoadingIndicatorStyle
+import kotlin.math.cos
+import kotlin.math.sin
 
 class OverlayManager(private val context: Context) {
 
@@ -41,8 +49,20 @@ class OverlayManager(private val context: Context) {
         windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     }
 
-    private fun dp(v: Int): Int = (v * context.resources.displayMetrics.density).toInt()
     private fun dpF(v: Float): Float = v * context.resources.displayMetrics.density
+
+    /** Colour of the loading indicator, from Settings -> Indicator colour. */
+    private var indicatorColor: Int = LoadingIndicatorStyle.DEFAULT_COLOR
+
+    /** Size multiplier of the loading indicator, from Settings -> Indicator size. */
+    private var indicatorScale: Float = 1f
+
+    /** Density-independent size, additionally multiplied by the user's indicator size. */
+    private fun sdp(v: Int): Int =
+        (v * indicatorScale * context.resources.displayMetrics.density).toInt().coerceAtLeast(1)
+
+    /** Same as [sdp] but keeps the fractional part, for stroke widths and corner radii. */
+    private fun sdpF(v: Float): Float = v * indicatorScale * context.resources.displayMetrics.density
 
     fun showLoading(config: AppConfig) {
         if (!config.enableLoadingOverlay) return
@@ -51,6 +71,8 @@ class OverlayManager(private val context: Context) {
             clearLoadingAnimators()
             val rawStyle = try { config.loadingIndicatorStyle } catch (_: Exception) { "classic" }
             val style = (rawStyle as? String ?: "classic").ifBlank { "classic" }
+            indicatorColor = LoadingIndicatorStyle.sanitizeColor(config.loadingIndicatorColor)
+            indicatorScale = LoadingIndicatorStyle.scaleOf(config.loadingIndicatorSizePercent)
             val content = when (style) {
                 "dots" -> createDotsView()
                 "pulse" -> createPulseView()
@@ -106,11 +128,13 @@ class OverlayManager(private val context: Context) {
     // No background - immersive, just floating indicator
     private fun createClassicView(): View {
         val container = FrameLayout(context).apply {
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(sdp(8), sdp(8), sdp(8), sdp(8))
             // No background - transparent
         }
         val progressBar = ProgressBar(context).apply {
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            // 48dp is the platform default, so the default size looks exactly like before.
+            layoutParams = FrameLayout.LayoutParams(sdp(48), sdp(48))
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(indicatorColor)
             // Add subtle shadow via elevation on parent? ProgressBar itself
             elevation = dpF(4f)
         }
@@ -122,15 +146,15 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(sdp(4), sdp(4), sdp(4), sdp(4))
             // No background - immersive
         }
         repeat(3) { index ->
             val dot = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(10), dp(10)).apply {
-                    setMargins(dp(4), 0, dp(4), 0)
+                layoutParams = LinearLayout.LayoutParams(sdp(10), sdp(10)).apply {
+                    setMargins(sdp(4), 0, sdp(4), 0)
                 }
-                background = circleDrawable(Color.WHITE)
+                background = circleDrawable(indicatorColor)
                 elevation = dpF(6f)
             }
             container.addView(dot)
@@ -165,15 +189,15 @@ class OverlayManager(private val context: Context) {
 
     private fun createPulseView(): View {
         val container = FrameLayout(context).apply {
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(sdp(4), sdp(4), sdp(4), sdp(4))
         }
         val outer = FrameLayout(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(48), dp(48), Gravity.CENTER)
-            background = circleDrawable(0x334F46E5)
+            layoutParams = FrameLayout.LayoutParams(sdp(48), sdp(48), Gravity.CENTER)
+            background = circleDrawable(LoadingIndicatorStyle.withAlpha(indicatorColor, 0x33))
         }
         val inner = View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(20), dp(20), Gravity.CENTER)
-            background = circleDrawable(Color.WHITE)
+            layoutParams = FrameLayout.LayoutParams(sdp(20), sdp(20), Gravity.CENTER)
+            background = circleDrawable(indicatorColor)
             elevation = dpF(8f)
         }
         container.addView(outer)
@@ -219,17 +243,17 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(sdp(4), sdp(4), sdp(4), sdp(4))
         }
         repeat(3) { index ->
             val bar = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(5), dp(18)).apply {
-                    setMargins(dp(3), 0, dp(3), 0)
+                layoutParams = LinearLayout.LayoutParams(sdp(5), sdp(18)).apply {
+                    setMargins(sdp(3), 0, sdp(3), 0)
                     gravity = Gravity.BOTTOM
                 }
                 background = GradientDrawable().apply {
-                    setColor(Color.WHITE)
-                    cornerRadius = dpF(2.5f)
+                    setColor(indicatorColor)
+                    cornerRadius = sdpF(2.5f)
                 }
                 elevation = dpF(4f)
             }
@@ -251,18 +275,18 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(sdp(6), sdp(6), sdp(6), sdp(6))
         }
         repeat(3) { index ->
             val dot = View(context).apply {
-                layoutParams = LinearLayout.LayoutParams(dp(8), dp(8)).apply {
-                    setMargins(dp(3), 0, dp(3), 0)
+                layoutParams = LinearLayout.LayoutParams(sdp(8), sdp(8)).apply {
+                    setMargins(sdp(3), 0, sdp(3), 0)
                 }
-                background = circleDrawable(Color.WHITE)
+                background = circleDrawable(indicatorColor)
                 elevation = dpF(5f)
             }
             container.addView(dot)
-            val anim = ObjectAnimator.ofFloat(dot, View.TRANSLATION_Y, 0f, -dpF(7f)).apply {
+            val anim = ObjectAnimator.ofFloat(dot, View.TRANSLATION_Y, 0f, -sdpF(7f)).apply {
                 duration = 380
                 startDelay = (index * 120L)
                 repeatCount = ValueAnimator.INFINITE
@@ -279,19 +303,19 @@ class OverlayManager(private val context: Context) {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(sdp(4), sdp(4), sdp(4), sdp(4))
         }
         val progress = ProgressBar(context).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(16), dp(16)).apply {
-                setMargins(0, 0, dp(8), 0)
+            layoutParams = LinearLayout.LayoutParams(sdp(16), sdp(16)).apply {
+                setMargins(0, 0, sdp(8), 0)
             }
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            indeterminateTintList = android.content.res.ColorStateList.valueOf(indicatorColor)
             elevation = dpF(4f)
         }
         val text = TextView(context).apply {
             this.text = "Thinking..."
-            textSize = 12f
-            setTextColor(Color.WHITE)
+            textSize = 12f * indicatorScale
+            setTextColor(indicatorColor)
             setTypeface(null, android.graphics.Typeface.BOLD)
             setShadowLayer(dpF(4f), 0f, 0f, Color.BLACK)
         }
@@ -300,31 +324,56 @@ class OverlayManager(private val context: Context) {
         return container
     }
 
+    /**
+     * Neon ring: a glowing tube of light that sweeps around a dim track, with a bright leading
+     * head and a breathing glow. Drawn by [NeonRingView] instead of a tinted ProgressBar so the
+     * glow, trail and core can all follow the colour the user picked.
+     */
     private fun createNeonRingView(): View {
         val container = FrameLayout(context).apply {
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(sdp(6), sdp(6), sdp(6), sdp(6))
         }
-        val ring = ProgressBar(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(28), dp(28), Gravity.CENTER)
-            isIndeterminate = true
-            indeterminateTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-            elevation = dpF(4f)
+        val ring = NeonRingView(context, indicatorColor, sdpF(3.5f)).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(52), sdp(52), Gravity.CENTER)
         }
-        val dot = View(context).apply {
-            layoutParams = FrameLayout.LayoutParams(dp(8), dp(8), Gravity.CENTER)
-            background = circleDrawable(Color.WHITE)
+        val core = View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(8), sdp(8), Gravity.CENTER)
+            background = circleDrawable(LoadingIndicatorStyle.contrastColor(indicatorColor))
             elevation = dpF(6f)
         }
         container.addView(ring)
-        container.addView(dot)
+        container.addView(core)
 
-        val rot = ObjectAnimator.ofFloat(ring, View.ROTATION, 0f, 360f).apply {
-            duration = 900
+        val spin = ObjectAnimator.ofFloat(ring, View.ROTATION, 0f, 360f).apply {
+            duration = 1100
             repeatCount = ValueAnimator.INFINITE
-            interpolator = android.view.animation.LinearInterpolator()
+            interpolator = LinearInterpolator()
             start()
         }
-        loadingAnimators.add(rot)
+        // Reflection-free "breathe": drives the glow strength and redraws the ring.
+        val breathe = ValueAnimator.ofFloat(0.55f, 1f).apply {
+            duration = 900
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { ring.glowStrength = it.animatedValue as Float }
+            start()
+        }
+        val coreScaleX = ObjectAnimator.ofFloat(core, View.SCALE_X, 0.75f, 1.25f).apply {
+            duration = 900
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
+        val coreScaleY = ObjectAnimator.ofFloat(core, View.SCALE_Y, 0.75f, 1.25f).apply {
+            duration = 900
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
+        loadingAnimators.addAll(listOf(spin, breathe, coreScaleX, coreScaleY))
         return container
     }
 
@@ -659,5 +708,99 @@ class OverlayManager(private val context: Context) {
         hideUndoButton()
         hidePreviewDialog()
         hideSnippetSelection()
+    }
+}
+
+/**
+ * A glowing ring, drawn rather than tinted: a dim track, a comet-like arc whose tail fades out,
+ * a wide soft halo and a bright leading head. [glowStrength] makes the glow breathe.
+ */
+private class NeonRingView(
+    context: Context,
+    private val color: Int,
+    private val strokeWidth: Float
+) : View(context) {
+
+    /** 0f..1f - how strongly the tube is glowing right now. */
+    var glowStrength: Float = 1f
+        set(value) {
+            field = value.coerceIn(0f, 1f)
+            invalidate()
+        }
+
+    private val arcRect = RectF()
+    private var headX = 0f
+    private var headY = 0f
+
+    private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        this.strokeWidth = this@NeonRingView.strokeWidth
+        this.color = LoadingIndicatorStyle.withAlpha(this@NeonRingView.color, 44)
+    }
+
+    private val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        this.strokeWidth = this@NeonRingView.strokeWidth * 3f
+        this.color = LoadingIndicatorStyle.withAlpha(this@NeonRingView.color, 70)
+    }
+
+    private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        this.strokeWidth = this@NeonRingView.strokeWidth
+    }
+
+    private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        this.color = LoadingIndicatorStyle.contrastColor(this@NeonRingView.color)
+    }
+
+    /** Length of the lit arc; the remaining 60 degrees are the faded tail. */
+    private val sweepAngle = 300f
+
+    init {
+        // setShadowLayer() is ignored for shapes on a hardware canvas - glow needs software.
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // Leave room around the ring so the halo and the glow are not clipped by the view bounds.
+        val inset = strokeWidth * 3.5f + 1f
+        arcRect.set(inset, inset, w - inset, h - inset)
+        arcPaint.shader = SweepGradient(
+            w / 2f,
+            h / 2f,
+            intArrayOf(
+                LoadingIndicatorStyle.withAlpha(color, 0),
+                LoadingIndicatorStyle.withAlpha(color, 90),
+                color,
+                color
+            ),
+            floatArrayOf(0f, 0.3f, 0.85f, 1f)
+        )
+        val radians = Math.toRadians(sweepAngle.toDouble())
+        headX = arcRect.centerX() + arcRect.width() / 2f * cos(radians).toFloat()
+        headY = arcRect.centerY() + arcRect.height() / 2f * sin(radians).toFloat()
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        if (arcRect.isEmpty) return
+        val glow = glowStrength
+
+        haloPaint.alpha = (80f * glow).toInt().coerceIn(0, 255)
+        haloPaint.setShadowLayer(strokeWidth * 1.5f * glow, 0f, 0f, color)
+        canvas.drawArc(arcRect, 0f, sweepAngle, false, haloPaint)
+
+        canvas.drawArc(arcRect, 0f, 360f, false, trackPaint)
+
+        arcPaint.setShadowLayer(strokeWidth * 2f * glow, 0f, 0f, color)
+        canvas.drawArc(arcRect, 0f, sweepAngle, false, arcPaint)
+
+        headPaint.setShadowLayer(strokeWidth * 2.5f * glow, 0f, 0f, color)
+        canvas.drawCircle(headX, headY, strokeWidth * 0.75f, headPaint)
     }
 }
