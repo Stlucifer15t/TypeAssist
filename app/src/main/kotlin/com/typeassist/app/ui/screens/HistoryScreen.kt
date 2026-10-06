@@ -40,7 +40,7 @@ fun HistoryScreen(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { 
             TopAppBar(
-                title = { Text("History (Last 5 Min)") }, 
+                title = { Text("History (Last Hour)") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
                 actions = {
                     TextButton(onClick = {
@@ -51,17 +51,17 @@ fun HistoryScreen(onBack: () -> Unit) {
                         Text("Clear", color = MaterialTheme.colorScheme.primary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.primary, navigationIconContentColor = MaterialTheme.colorScheme.primary)
-            ) 
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background, titleContentColor = MaterialTheme.colorScheme.onBackground, navigationIconContentColor = MaterialTheme.colorScheme.onBackground)
+            )
         }
     ) { p ->
         if (historyItems.isEmpty()) {
             Box(modifier = Modifier.padding(p).fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Nothing here yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(6.dp))
-                        Text("Processed text from the last five minutes will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Text processed in the last hour will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -70,7 +70,7 @@ fun HistoryScreen(onBack: () -> Unit) {
                 item {
                     PageHeading(
                         title = "Recent changes",
-                        description = "Recover or copy text processed in the last five minutes.",
+                        description = "Recover or copy text processed in the last hour.",
                         eyebrow = "HISTORY"
                     )
                     Spacer(Modifier.height(16.dp))
@@ -78,8 +78,8 @@ fun HistoryScreen(onBack: () -> Unit) {
                 items(historyItems) { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        elevation = CardDefaults.cardElevation(2.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        elevation = CardDefaults.cardElevation(0.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

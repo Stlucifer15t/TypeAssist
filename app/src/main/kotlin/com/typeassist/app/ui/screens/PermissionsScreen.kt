@@ -231,9 +231,9 @@ fun PermissionsScreen(
                         showSkipDialog = false
                         onFinished()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFBC02D))
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
                 ) {
-                    Text("Okay", color = Color.Black)
+                    Text("Okay")
                 }
             },
             dismissButton = {

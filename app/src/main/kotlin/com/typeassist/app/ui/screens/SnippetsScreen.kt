@@ -71,7 +71,11 @@ fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.primary, navigationIconContentColor = MaterialTheme.colorScheme.primary)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                )
             ) 
         },
         floatingActionButtonPosition = FabPosition.Center,
@@ -143,8 +147,8 @@ fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                                 originalTrigger = s.trigger
                                 showEditDialog = true 
                             }, 
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(2.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        elevation = CardDefaults.cardElevation(0.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(16.dp), 

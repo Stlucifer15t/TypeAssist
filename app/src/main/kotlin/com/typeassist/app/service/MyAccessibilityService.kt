@@ -64,6 +64,7 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d(TAG, "JNI Test: ${stringFromJNI()}")
+        HistoryManager.init(applicationContext)
         overlayManager = OverlayManager(this)
         overlayManager.onUndoAction = { performUndo() }
         overlayManager.onOverlayShown = { 
@@ -112,10 +113,6 @@ class MyAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error starting notification", e)
         }
-    }
-
-    private fun isDarkMode(): Boolean {
-        return (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -232,7 +229,7 @@ class MyAccessibilityService : AccessibilityService() {
                                 // Show selection overlay
                                 Log.d(TAG, "Showing selection overlay for '${s.trigger}' with ${variations.size} variations")
                                 pendingTriggerRunnable?.let { debounceHandler.removeCallbacks(it) }
-                                overlayManager.showSnippetSelection(s.trigger, variations, isDarkMode()) { selected ->
+                                overlayManager.showSnippetSelection(s.trigger, variations, overlayManager.paletteFor(config)) { selected ->
                                     Log.d(TAG, "Variation selected: '$selected'")
                                     if (!inputNode.refresh()) {
                                         Log.e(TAG, "Could not refresh input node for insertion")
@@ -447,12 +444,11 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
-        val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-        val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val palette = overlayManager.paletteFor(config)
         val wordCount = cleanedText.split("\\s+".toRegex()).size
 
         if (wordCount > 15 && config.enablePreviewDialog) {
-            overlayManager.showPreviewDialog(cleanedText, isDarkMode) {
+            overlayManager.showPreviewDialog(cleanedText, palette) {
                 pasteText(node, cleanedText)
                 overlayManager.showUndoButton(config)
             }

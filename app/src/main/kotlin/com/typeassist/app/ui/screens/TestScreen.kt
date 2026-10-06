@@ -33,7 +33,11 @@ fun TestScreen(onStartTest: () -> Unit, onStopTest: () -> Unit, onBack: () -> Un
         "এটি একটি এআই ভিত্তিক অ্যাপ। .tr"
     )
 
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { TopAppBar(title = { Text("Test Lab") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.primary, navigationIconContentColor = MaterialTheme.colorScheme.primary)) }) { p ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = { TopAppBar(title = { Text("Test Lab") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } }, colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+                )) }) { p ->
         Column(modifier = Modifier.padding(p).padding(16.dp).verticalScroll(rememberScrollState())) {
             PageHeading(
                 title = "Try a shortcut",
@@ -46,7 +50,7 @@ fun TestScreen(onStartTest: () -> Unit, onStopTest: () -> Unit, onBack: () -> Un
             Text("Quick Test Triggers:", fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             presets.forEach { item ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { t = item }, elevation = CardDefaults.cardElevation(2.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { t = item }, elevation = CardDefaults.cardElevation(0.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.TouchApp, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(12.dp)); Text(item, fontSize = 14.sp) }
                 }
             }

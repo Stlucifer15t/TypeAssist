@@ -2,6 +2,7 @@ package com.typeassist.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -101,11 +102,13 @@ import com.typeassist.app.api.CloudflareApiClient
 import com.typeassist.app.api.CustomApiClient
 import com.typeassist.app.api.ModelCatalogClient
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.AppThemeMode
 import com.typeassist.app.data.CloudflareConfig
 import com.typeassist.app.data.CustomApiConfig
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.SavedGeminiConfig
+import com.typeassist.app.data.identityKey
 import com.typeassist.app.data.repository.UpdateRepository
 import com.typeassist.app.ui.components.PageHeading
 import kotlinx.coroutines.CancellationException
@@ -249,6 +252,35 @@ private fun GeneralSettingsTabModern(
             LoadingStyleOption("pill", "Pill", "Rounded pill with text"),
             LoadingStyleOption("neon", "Neon ring", "Glowing ring loader")
         )
+    }
+
+    ModernSettingsSection(
+        title = "Appearance",
+        description = "Pick the look of the app and its floating cards."
+    ) {
+        ThemeModeSelector(
+            selected = AppThemeMode.sanitize(config.appThemeMode),
+            onSelect = { mode -> onSave(config.copy(appThemeMode = mode)) }
+        )
+        // Defensive: configs saved before themes existed carry no value (Gson null).
+        val dynamicColor = try { config.useDynamicColor } catch (_: Exception) { true }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            HorizontalDivider()
+            ModernSwitchRow(
+                title = "Dynamic colour",
+                description = "Match app colours to your wallpaper (Material You).",
+                checked = dynamicColor
+            ) { enabled ->
+                onSave(config.copy(useDynamicColor = enabled))
+            }
+        } else {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Dynamic colour needs Android 12 or newer.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 
     ModernSettingsSection(
@@ -994,17 +1026,26 @@ private fun AiProviderSettingsTabModern(config: AppConfig, client: OkHttpClient,
                     model = cfModel.trim()
                 )
 
+                // One profile per identity: saving the same endpoint + key again just
+                // overlays the existing entry (updating its model) instead of adding
+                // another row for every model change.
                 val savedCustom = config.savedCustomConfigs.toMutableList()
-                if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank() && newCustomConfig !in savedCustom) {
-                    savedCustom.add(newCustomConfig)
+                if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank()) {
+                    val identity = newCustomConfig.identityKey()
+                    val existingIndex = savedCustom.indexOfFirst { it.identityKey() == identity }
+                    if (existingIndex >= 0) savedCustom[existingIndex] = newCustomConfig else savedCustom.add(newCustomConfig)
                 }
                 val savedGemini = config.savedGeminiConfigs.toMutableList()
-                if (selectedProvider == "gemini" && geminiKey.isNotBlank() && newGeminiConfig !in savedGemini) {
-                    savedGemini.add(newGeminiConfig)
+                if (selectedProvider == "gemini" && geminiKey.isNotBlank()) {
+                    val identity = newGeminiConfig.identityKey()
+                    val existingIndex = savedGemini.indexOfFirst { it.identityKey() == identity }
+                    if (existingIndex >= 0) savedGemini[existingIndex] = newGeminiConfig else savedGemini.add(newGeminiConfig)
                 }
                 val savedCloudflare = config.savedCloudflareConfigs.toMutableList()
-                if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank() && newCloudflareConfig !in savedCloudflare) {
-                    savedCloudflare.add(newCloudflareConfig)
+                if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank()) {
+                    val identity = newCloudflareConfig.identityKey()
+                    val existingIndex = savedCloudflare.indexOfFirst { it.identityKey() == identity }
+                    if (existingIndex >= 0) savedCloudflare[existingIndex] = newCloudflareConfig else savedCloudflare.add(newCloudflareConfig)
                 }
                 val savedLocal = config.savedLocalModels.toMutableList()
                 if (selectedProvider == "local" && config.localLlmConfig.modelPath.isNotBlank() && config.localLlmConfig.modelPath !in savedLocal) {
@@ -1097,11 +1138,11 @@ private fun ModernSettingsSection(
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             if (!description.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1120,7 +1161,14 @@ private fun ModernSwitchRow(
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onCheckedChange = onCheckedChange
+            )
+            .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -1128,7 +1176,80 @@ private fun ModernSwitchRow(
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
+    }
+}
+
+private data class ThemeModeOption(
+    val id: String,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
+/** M3 single-select tiles for the app theme: System, Light, Dark and AMOLED. */
+@Composable
+private fun ThemeModeSelector(
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    val options = remember {
+        listOf(
+            ThemeModeOption(AppThemeMode.SYSTEM, "System", Icons.Default.BrightnessAuto),
+            ThemeModeOption(AppThemeMode.LIGHT, "Light", Icons.Default.LightMode),
+            ThemeModeOption(AppThemeMode.DARK, "Dark", Icons.Default.DarkMode),
+            ThemeModeOption(AppThemeMode.AMOLED, "AMOLED", Icons.Default.Contrast)
+        )
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.forEach { option ->
+            val isSelected = option.id == selected
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                    .selectable(
+                        selected = isSelected,
+                        role = Role.RadioButton,
+                        onClick = { onSelect(option.id) }
+                    )
+                    .padding(vertical = 12.dp, horizontal = 6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = option.icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    option.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    maxLines = 1,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.primary
+                            else Color.Transparent
+                        )
+                )
+            }
+        }
     }
 }
 

@@ -24,6 +24,9 @@
 
 ### Compared to upstream:
 
+- **🎨 Material 3 theme system** — Settings → General → *Appearance*: choose **System / Light / Dark / AMOLED** (true-black for OLED screens). Optional **dynamic colour** (Material You wallpaper colours) on Android 12+. Applied instantly across the app *and* the floating overlays (preview card, snippet picker, undo chip).
+- **🧹 One profile per endpoint** — saving a provider (Gemini / custom API / Cloudflare) with the same URL + key no longer piles up duplicate rows when you change models; the existing profile is updated in place. Old duplicates are merged automatically on first launch.
+- **🕘 History lasts 1 hour** — up from 5 minutes, and it now survives app restarts (persisted, capped at 200 items).
 - **🎨 New App Icon** — Rebranded to **P** for Prompt AI with purple-to-blue gradient and sparkle accent. All mipmap densities + monochrome + Play Store icon updated.
 - **💫 Loading Indicator Styles** — No more bland spinner! Choose from 7 styles in Settings → General → Floating controls:
   - `Classic` - Simple spinner

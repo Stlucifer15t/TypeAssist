@@ -4,6 +4,7 @@ import android.animation.Animator
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -25,9 +26,31 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.AppThemeMode
 import com.typeassist.app.data.LoadingIndicatorStyle
 import kotlin.math.cos
 import kotlin.math.sin
+
+/**
+ * Colours for the floating cards, resolved from the user's theme choice in Settings →
+ * Appearance: System follows the device, Dark and AMOLED are always dark (AMOLED pure
+ * black), Light always light. Keeps the floating UI consistent with the in-app Material 3 look.
+ */
+data class OverlayPalette(
+    val isDark: Boolean,
+    /** Card background (with slight transparency so it floats over any app). */
+    val background: Int,
+    /** Accent colour for titles and text actions. */
+    val primary: Int,
+    /** Main text colour. */
+    val onSurface: Int,
+    /** Secondary text colour (hints). */
+    val onSurfaceVariant: Int,
+    /** Hairline dividers and card borders. */
+    val outlineVariant: Int,
+    /** Tonal pill/surface colour (undo chip). */
+    val surfaceContainer: Int
+)
 
 class OverlayManager(private val context: Context) {
 
@@ -50,6 +73,42 @@ class OverlayManager(private val context: Context) {
     }
 
     private fun dpF(v: Float): Float = v * context.resources.displayMetrics.density
+
+    /** True when the device itself is in dark mode (used for the System theme option). */
+    private fun isDeviceDarkMode(): Boolean =
+        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    /** Resolves the floating-card colours for the user's saved theme mode. */
+    fun paletteFor(config: AppConfig?): OverlayPalette {
+        val mode = AppThemeMode.sanitize(config?.appThemeMode)
+        val dark = when (mode) {
+            AppThemeMode.LIGHT -> false
+            AppThemeMode.DARK, AppThemeMode.AMOLED -> true
+            else -> isDeviceDarkMode()
+        }
+        val amoled = dark && mode == AppThemeMode.AMOLED
+        return if (dark) {
+            OverlayPalette(
+                isDark = true,
+                background = (if (amoled) 0xF0000000L else 0xF0131420L).toInt(),
+                primary = 0xFFC4C0FF.toInt(),
+                onSurface = 0xFFE3E1E9.toInt(),
+                onSurfaceVariant = 0xFFB9B7C6.toInt(),
+                outlineVariant = (if (amoled) 0xFF2A2A33L else 0xFF3D3C48L).toInt(),
+                surfaceContainer = (if (amoled) 0xFF14141AL else 0xFF1E1F26L).toInt()
+            )
+        } else {
+            OverlayPalette(
+                isDark = false,
+                background = 0xF7FBF9FF.toInt(),
+                primary = 0xFF5348CE.toInt(),
+                onSurface = 0xFF1A1B22.toInt(),
+                onSurfaceVariant = 0xFF5B5A64.toInt(),
+                outlineVariant = 0xFFD8D6E2.toInt(),
+                surfaceContainer = 0xFFEFEDF5.toInt()
+            )
+        }
+    }
 
     /** Colour of the loading indicator, from Settings -> Indicator colour. */
     private var indicatorColor: Int = LoadingIndicatorStyle.DEFAULT_COLOR
@@ -381,14 +440,22 @@ class OverlayManager(private val context: Context) {
         if (!config.enableUndoOverlay) return
         mainHandler.post {
             if (undoView != null) return@post
+            val palette = paletteFor(config)
             undoView = FrameLayout(context)
             val btn = Button(context).apply {
                 text = "UNDO"
-                textSize = 14f
-                setTextColor(Color.WHITE)
-                background = GradientDrawable().apply { setColor(0xEE333333.toInt()); cornerRadius = 50f; setStroke(2, Color.WHITE) }
-                setOnClickListener { 
-                    onUndoAction?.invoke() 
+                textSize = 13f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(palette.primary)
+                stateListAnimator = null
+                background = GradientDrawable().apply {
+                    setColor(palette.surfaceContainer)
+                    cornerRadius = dpF(26f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
+                }
+                setPadding(dpF(22f).toInt(), dpF(10f).toInt(), dpF(22f).toInt(), dpF(10f).toInt())
+                setOnClickListener {
+                    onUndoAction?.invoke()
                     hideUndoButton()
                 }
             }
@@ -422,31 +489,32 @@ class OverlayManager(private val context: Context) {
         }
     }
 
-    fun showPreviewDialog(text: String, isDarkMode: Boolean, onInsert: () -> Unit) {
+    fun showPreviewDialog(text: String, palette: OverlayPalette, onInsert: () -> Unit) {
         mainHandler.post {
             removePreviewInternal()
-            
-            val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
-            val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
-            val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
-            val discardTextColor = if (isDarkMode) 0xFFCAC4D0.toInt() else 0xFF49454F.toInt()
-            val insertTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
+
+            val cardBgColor = palette.background
+            val primaryTextColor = palette.primary
+            val secondaryTextColor = palette.onSurface
+            val discardTextColor = palette.onSurfaceVariant
+            val insertTextColor = palette.primary
+            val cardRadius = dpF(28f)
 
             val card = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(40, 40, 40, 40)
-                background = GradientDrawable().apply { 
+                setPadding(dpF(22f).toInt(), dpF(20f).toInt(), dpF(22f).toInt(), dpF(12f).toInt())
+                background = GradientDrawable().apply {
                     setColor(cardBgColor)
-                    cornerRadius = 32f 
-                    setStroke(3, insertTextColor) 
+                    cornerRadius = cardRadius
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
                 }
                 isClickable = true
-                elevation = 20f
+                elevation = dpF(12f)
             }
 
             val title = android.widget.TextView(context).apply {
                 this.text = "Preview Response"
-                textSize = 18f
+                textSize = 16f
                 setTextColor(primaryTextColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setPadding(0, 0, 0, 5)
@@ -464,12 +532,12 @@ class OverlayManager(private val context: Context) {
 
             val scrollView = android.widget.ScrollView(context).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 
-                    0 
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    0
                 ).apply { weight = 1f }
             }
             scrollView.layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.35).toInt()
-            
+
             val contentText = android.widget.TextView(context).apply {
                 this.text = text
                 textSize = 14f
@@ -490,6 +558,7 @@ class OverlayManager(private val context: Context) {
                     this.text = label
                     setTextColor(color)
                     setTypeface(null, android.graphics.Typeface.BOLD)
+                    stateListAnimator = null
                     background = android.util.TypedValue().let { tv ->
                         context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
                         context.resources.getDrawable(tv.resourceId, context.theme)
@@ -559,31 +628,30 @@ class OverlayManager(private val context: Context) {
     private var snippetSelectionView: FrameLayout? = null
     private var currentSnippetTrigger: String? = null
 
-    fun showSnippetSelection(trigger: String, variations: List<String>, isDarkMode: Boolean, onSelected: (String) -> Unit) {
+    fun showSnippetSelection(trigger: String, variations: List<String>, palette: OverlayPalette, onSelected: (String) -> Unit) {
         if (currentSnippetTrigger == trigger) return
-        
+
         currentSnippetTrigger = trigger
         onOverlayShown?.invoke()
 
         mainHandler.post {
             removeSnippetSelectionInternal()
 
-            val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
-            val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
-            val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
-            val surfaceVariantColor = if (isDarkMode) 0xFF49454F.toInt() else 0xFFE7E0EC.toInt()
-            val primaryColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
+            val cardBgColor = palette.background
+            val primaryTextColor = palette.primary
+            val secondaryTextColor = palette.onSurface
+            val surfaceVariantColor = palette.outlineVariant
 
             val container = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(40, 40, 40, 40)
+                setPadding(dpF(22f).toInt(), dpF(20f).toInt(), dpF(22f).toInt(), dpF(12f).toInt())
                 background = GradientDrawable().apply {
                     setColor(cardBgColor)
-                    cornerRadius = 32f
-                    setStroke(3, primaryColor)
+                    cornerRadius = dpF(28f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
                 }
                 isClickable = true
-                elevation = 20f
+                elevation = dpF(12f)
             }
 
             val title = android.widget.TextView(context).apply {
