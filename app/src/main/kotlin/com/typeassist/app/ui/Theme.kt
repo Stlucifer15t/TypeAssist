@@ -35,11 +35,6 @@ object ThemeController {
     var useDynamicColor by mutableStateOf(true)
         private set
 
-    /** True when the resolved (effective) scheme is dark; updated on every composition. */
-    @Volatile
-    var isEffectiveDark: Boolean = false
-        private set
-
     fun syncFrom(config: AppConfig?) {
         if (config == null) return
         themeMode = AppThemeMode.sanitize(config.appThemeMode)
@@ -127,7 +122,7 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 /** Pure-black variant of the dark scheme for AMOLED screens (no grey wash, true off pixels). */
-private fun darkColorSchemeForAmoled(): darkColorScheme = DarkColorScheme.copy(
+private fun darkColorSchemeForAmoled() = DarkColorScheme.copy(
     background = Color.Black,
     onBackground = Color(0xFFE3E1E9),
     surface = Color.Black,
@@ -170,7 +165,6 @@ fun AppTheme(content: @Composable () -> Unit) {
     }
     // AMOLED always forces true blacks, including over wallpaper-derived colours.
     val colorScheme = if (amoled) darkColorSchemeForAmoled() else baseScheme
-    ThemeController.isEffectiveDark = darkTheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
