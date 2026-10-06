@@ -78,7 +78,7 @@ android {
                 // Committed public keystore so CI produces installable (signed) APKs.
                 // The key is public BY DESIGN for this fork — anyone can build a
                 // compatible APK. Replace with your own private keystore if needed.
-                storeFile = file("keystore/release.p12")
+                storeFile = rootProject.file("keystore/release.p12")
                 storePassword = "promptai"
                 storeType = "PKCS12"
                 keyAlias = "promptai"
