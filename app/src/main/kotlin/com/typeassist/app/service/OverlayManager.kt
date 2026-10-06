@@ -4,6 +4,7 @@ import android.animation.Animator
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -25,9 +26,31 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.AppThemeMode
 import com.typeassist.app.data.LoadingIndicatorStyle
 import kotlin.math.cos
 import kotlin.math.sin
+
+/**
+ * Colours for the floating cards, resolved from the user's theme choice in Settings →
+ * Appearance: System follows the device, Dark and AMOLED are always dark (AMOLED pure
+ * black), Light always light. Keeps the floating UI consistent with the in-app Material 3 look.
+ */
+data class OverlayPalette(
+    val isDark: Boolean,
+    /** Card background (with slight transparency so it floats over any app). */
+    val background: Int,
+    /** Accent colour for titles and text actions. */
+    val primary: Int,
+    /** Main text colour. */
+    val onSurface: Int,
+    /** Secondary text colour (hints). */
+    val onSurfaceVariant: Int,
+    /** Hairline dividers and card borders. */
+    val outlineVariant: Int,
+    /** Tonal pill/surface colour (undo chip). */
+    val surfaceContainer: Int
+)
 
 class OverlayManager(private val context: Context) {
 
@@ -40,6 +63,11 @@ class OverlayManager(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val hideUndoRunnable = Runnable { hideUndoButton() }
     private val hidePreviewRunnable = Runnable { hidePreviewDialog() }
+    private var streamingView: FrameLayout? = null
+    private var streamingTextView: TextView? = null
+    private var streamingScrollView: android.widget.ScrollView? = null
+    private var autoCompleteView: FrameLayout? = null
+    private var selectionToolbarView: FrameLayout? = null
     
     var onUndoAction: (() -> Unit)? = null
     var onOverlayShown: (() -> Unit)? = null
@@ -50,6 +78,42 @@ class OverlayManager(private val context: Context) {
     }
 
     private fun dpF(v: Float): Float = v * context.resources.displayMetrics.density
+
+    /** True when the device itself is in dark mode (used for the System theme option). */
+    private fun isDeviceDarkMode(): Boolean =
+        (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+
+    /** Resolves the floating-card colours for the user's saved theme mode. */
+    fun paletteFor(config: AppConfig?): OverlayPalette {
+        val mode = AppThemeMode.sanitize(config?.appThemeMode)
+        val dark = when (mode) {
+            AppThemeMode.LIGHT -> false
+            AppThemeMode.DARK, AppThemeMode.AMOLED -> true
+            else -> isDeviceDarkMode()
+        }
+        val amoled = dark && mode == AppThemeMode.AMOLED
+        return if (dark) {
+            OverlayPalette(
+                isDark = true,
+                background = (if (amoled) 0xF0000000L else 0xF0131420L).toInt(),
+                primary = 0xFFC4C0FF.toInt(),
+                onSurface = 0xFFE3E1E9.toInt(),
+                onSurfaceVariant = 0xFFB9B7C6.toInt(),
+                outlineVariant = (if (amoled) 0xFF2A2A33L else 0xFF3D3C48L).toInt(),
+                surfaceContainer = (if (amoled) 0xFF14141AL else 0xFF1E1F26L).toInt()
+            )
+        } else {
+            OverlayPalette(
+                isDark = false,
+                background = 0xF7FBF9FF.toInt(),
+                primary = 0xFF5348CE.toInt(),
+                onSurface = 0xFF1A1B22.toInt(),
+                onSurfaceVariant = 0xFF5B5A64.toInt(),
+                outlineVariant = 0xFFD8D6E2.toInt(),
+                surfaceContainer = 0xFFEFEDF5.toInt()
+            )
+        }
+    }
 
     /** Colour of the loading indicator, from Settings -> Indicator colour. */
     private var indicatorColor: Int = LoadingIndicatorStyle.DEFAULT_COLOR
@@ -381,14 +445,22 @@ class OverlayManager(private val context: Context) {
         if (!config.enableUndoOverlay) return
         mainHandler.post {
             if (undoView != null) return@post
+            val palette = paletteFor(config)
             undoView = FrameLayout(context)
             val btn = Button(context).apply {
                 text = "UNDO"
-                textSize = 14f
-                setTextColor(Color.WHITE)
-                background = GradientDrawable().apply { setColor(0xEE333333.toInt()); cornerRadius = 50f; setStroke(2, Color.WHITE) }
-                setOnClickListener { 
-                    onUndoAction?.invoke() 
+                textSize = 13f
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                setTextColor(palette.primary)
+                stateListAnimator = null
+                background = GradientDrawable().apply {
+                    setColor(palette.surfaceContainer)
+                    cornerRadius = dpF(26f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
+                }
+                setPadding(dpF(22f).toInt(), dpF(10f).toInt(), dpF(22f).toInt(), dpF(10f).toInt())
+                setOnClickListener {
+                    onUndoAction?.invoke()
                     hideUndoButton()
                 }
             }
@@ -422,31 +494,32 @@ class OverlayManager(private val context: Context) {
         }
     }
 
-    fun showPreviewDialog(text: String, isDarkMode: Boolean, onInsert: () -> Unit) {
+    fun showPreviewDialog(text: String, palette: OverlayPalette, onInsert: () -> Unit) {
         mainHandler.post {
             removePreviewInternal()
-            
-            val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
-            val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
-            val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
-            val discardTextColor = if (isDarkMode) 0xFFCAC4D0.toInt() else 0xFF49454F.toInt()
-            val insertTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
+
+            val cardBgColor = palette.background
+            val primaryTextColor = palette.primary
+            val secondaryTextColor = palette.onSurface
+            val discardTextColor = palette.onSurfaceVariant
+            val insertTextColor = palette.primary
+            val cardRadius = dpF(28f)
 
             val card = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(40, 40, 40, 40)
-                background = GradientDrawable().apply { 
+                setPadding(dpF(22f).toInt(), dpF(20f).toInt(), dpF(22f).toInt(), dpF(12f).toInt())
+                background = GradientDrawable().apply {
                     setColor(cardBgColor)
-                    cornerRadius = 32f 
-                    setStroke(3, insertTextColor) 
+                    cornerRadius = cardRadius
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
                 }
                 isClickable = true
-                elevation = 20f
+                elevation = dpF(12f)
             }
 
             val title = android.widget.TextView(context).apply {
                 this.text = "Preview Response"
-                textSize = 18f
+                textSize = 16f
                 setTextColor(primaryTextColor)
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 setPadding(0, 0, 0, 5)
@@ -464,12 +537,12 @@ class OverlayManager(private val context: Context) {
 
             val scrollView = android.widget.ScrollView(context).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 
-                    0 
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    0
                 ).apply { weight = 1f }
             }
             scrollView.layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.35).toInt()
-            
+
             val contentText = android.widget.TextView(context).apply {
                 this.text = text
                 textSize = 14f
@@ -490,6 +563,7 @@ class OverlayManager(private val context: Context) {
                     this.text = label
                     setTextColor(color)
                     setTypeface(null, android.graphics.Typeface.BOLD)
+                    stateListAnimator = null
                     background = android.util.TypedValue().let { tv ->
                         context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
                         context.resources.getDrawable(tv.resourceId, context.theme)
@@ -552,6 +626,245 @@ class OverlayManager(private val context: Context) {
         }
     }
     
+    /** True while a modal overlay (loading, streaming, preview, snippet picker) is up. */
+    fun isBusy(): Boolean =
+        loadingView != null || streamingView != null || previewView != null || snippetSelectionView != null
+
+    // ------------------------------------------------------------------
+    // Streaming response card
+    // ------------------------------------------------------------------
+
+    /** Shows an M3 card with the accumulating AI response while tokens stream in. */
+    fun showStreamingCard(config: AppConfig) {
+        mainHandler.post {
+            hideStreamingInternal()
+            val palette = paletteFor(config)
+            val card = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(dpF(20f).toInt(), dpF(16f).toInt(), dpF(20f).toInt(), dpF(14f).toInt())
+                background = GradientDrawable().apply {
+                    setColor(palette.background)
+                    cornerRadius = dpF(26f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
+                }
+                isClickable = true
+                elevation = dpF(12f)
+            }
+
+            val title = TextView(context).apply {
+                text = "✍️ AI is writing…"
+                textSize = 13f
+                setTextColor(palette.primary)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+            }
+            card.addView(title)
+
+            val scrollView = android.widget.ScrollView(context).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    0
+                ).apply { weight = 1f }
+            }
+            val text = TextView(context).apply {
+                textSize = 14f
+                setTextColor(palette.onSurface)
+                setPadding(0, dpF(10f).toInt(), 0, 0)
+            }
+            scrollView.addView(text)
+            card.addView(scrollView)
+
+            streamingTextView = text
+            streamingScrollView = scrollView
+
+            streamingView = FrameLayout(context).apply { addView(card) }
+            val params = WindowManager.LayoutParams(
+                (context.resources.displayMetrics.widthPixels * 0.72f).toInt(),
+                (context.resources.displayMetrics.heightPixels * 0.30f).toInt(),
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.CENTER }
+            try { windowManager?.addView(streamingView, params) } catch (_: Exception) {}
+        }
+    }
+
+    /** Appends-free update: replaces the card body with the full accumulated text and autoscrolls. */
+    fun updateStreamingText(accumulated: String) {
+        mainHandler.post {
+            streamingTextView?.text = accumulated
+            streamingScrollView?.post {
+                streamingScrollView?.fullScroll(View.FOCUS_DOWN)
+            }
+        }
+    }
+
+    fun hideStreamingCard() {
+        mainHandler.post { hideStreamingInternal() }
+    }
+
+    private fun hideStreamingInternal() {
+        if (streamingView != null) {
+            try { windowManager?.removeView(streamingView) } catch (_: Exception) {}
+            streamingView = null
+            streamingTextView = null
+            streamingScrollView = null
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Trigger autocomplete hint
+    // ------------------------------------------------------------------
+
+    /**
+     * Small hint popup listing commands that match what the user is typing.
+     * [anchorY] is the screen Y of the input field's top edge; the popup floats just above it.
+     */
+    fun showAutocomplete(
+        candidates: List<Pair<String, String>>,
+        palette: OverlayPalette,
+        anchorY: Int,
+        onPick: (String) -> Unit
+    ) {
+        mainHandler.post {
+            hideAutocompleteInternal()
+            val container = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding(dpF(12f).toInt(), dpF(8f).toInt(), dpF(12f).toInt(), dpF(8f).toInt())
+                background = GradientDrawable().apply {
+                    setColor(palette.background)
+                    cornerRadius = dpF(20f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
+                }
+                elevation = dpF(10f)
+            }
+
+            candidates.forEach { (pattern, prompt) ->
+                val row = android.widget.LinearLayout(context).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setPadding(dpF(12f).toInt(), dpF(10f).toInt(), dpF(12f).toInt(), dpF(10f).toInt())
+                    isClickable = true
+                    val outValue = android.util.TypedValue()
+                    context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                    setBackgroundResource(outValue.resourceId)
+                    setOnClickListener {
+                        onPick(pattern)
+                        hideAutocomplete()
+                    }
+                }
+                val patternView = TextView(context).apply {
+                    text = pattern
+                    textSize = 14f
+                    setTextColor(palette.primary)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                }
+                val promptView = TextView(context).apply {
+                    text = prompt
+                    textSize = 11f
+                    setTextColor(palette.onSurfaceVariant)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }
+                row.addView(patternView)
+                row.addView(promptView)
+                container.addView(row)
+            }
+
+            autoCompleteView = FrameLayout(context).apply { addView(container) }
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                y = anchorY.coerceAtLeast(dpF(56f).toInt())
+            }
+            try { windowManager?.addView(autoCompleteView, params) } catch (_: Exception) {}
+        }
+    }
+
+    fun hideAutocomplete() {
+        mainHandler.post { hideAutocompleteInternal() }
+    }
+
+    private fun hideAutocompleteInternal() {
+        if (autoCompleteView != null) {
+            try { windowManager?.removeView(autoCompleteView) } catch (_: Exception) {}
+            autoCompleteView = null
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Selection toolbar
+    // ------------------------------------------------------------------
+
+    /** One tappable action on the selection toolbar; [onClick] runs on the main thread. */
+    data class SelectionAction(val label: String, val onClick: () -> Unit)
+
+    /** Floating action bar shown just above the field while the user has text selected. */
+    fun showSelectionToolbar(actions: List<SelectionAction>, palette: OverlayPalette, anchorTopY: Int) {
+        mainHandler.post {
+            hideSelectionToolbarInternal()
+            val row = android.widget.LinearLayout(context).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(dpF(6f).toInt(), dpF(4f).toInt(), dpF(6f).toInt(), dpF(4f).toInt())
+            }
+            actions.forEach { action ->
+                val chip = TextView(context).apply {
+                    text = action.label
+                    textSize = 13f
+                    setTextColor(palette.onSurface)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    val pad = dpF(13f).toInt()
+                    setPadding(pad, dpF(9f).toInt(), pad, dpF(9f).toInt())
+                    isClickable = true
+                    val outValue = android.util.TypedValue()
+                    context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                    setBackgroundResource(outValue.resourceId)
+                    setOnClickListener {
+                        hideSelectionToolbar()
+                        action.onClick()
+                    }
+                }
+                row.addView(chip)
+            }
+            val card = FrameLayout(context).apply {
+                background = GradientDrawable().apply {
+                    setColor(palette.surfaceContainer)
+                    cornerRadius = dpF(26f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
+                }
+                elevation = dpF(10f)
+                addView(row)
+            }
+            selectionToolbarView = FrameLayout(context).apply { addView(card) }
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                y = (anchorTopY - dpF(64f).toInt()).coerceAtLeast(dpF(56f).toInt())
+            }
+            try { windowManager?.addView(selectionToolbarView, params) } catch (_: Exception) {}
+        }
+    }
+
+    fun hideSelectionToolbar() {
+        mainHandler.post { hideSelectionToolbarInternal() }
+    }
+
+    private fun hideSelectionToolbarInternal() {
+        if (selectionToolbarView != null) {
+            try { windowManager?.removeView(selectionToolbarView) } catch (_: Exception) {}
+            selectionToolbarView = null
+        }
+    }
+
     fun showToast(message: String) {
         mainHandler.post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
     }
@@ -559,31 +872,30 @@ class OverlayManager(private val context: Context) {
     private var snippetSelectionView: FrameLayout? = null
     private var currentSnippetTrigger: String? = null
 
-    fun showSnippetSelection(trigger: String, variations: List<String>, isDarkMode: Boolean, onSelected: (String) -> Unit) {
+    fun showSnippetSelection(trigger: String, variations: List<String>, palette: OverlayPalette, onSelected: (String) -> Unit) {
         if (currentSnippetTrigger == trigger) return
-        
+
         currentSnippetTrigger = trigger
         onOverlayShown?.invoke()
 
         mainHandler.post {
             removeSnippetSelectionInternal()
 
-            val cardBgColor = if (isDarkMode) 0xFF1C1B1F.toInt() else 0xFFFFFBFE.toInt()
-            val primaryTextColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
-            val secondaryTextColor = if (isDarkMode) 0xFFE6E1E5.toInt() else 0xFF1C1B1F.toInt()
-            val surfaceVariantColor = if (isDarkMode) 0xFF49454F.toInt() else 0xFFE7E0EC.toInt()
-            val primaryColor = if (isDarkMode) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
+            val cardBgColor = palette.background
+            val primaryTextColor = palette.primary
+            val secondaryTextColor = palette.onSurface
+            val surfaceVariantColor = palette.outlineVariant
 
             val container = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(40, 40, 40, 40)
+                setPadding(dpF(22f).toInt(), dpF(20f).toInt(), dpF(22f).toInt(), dpF(12f).toInt())
                 background = GradientDrawable().apply {
                     setColor(cardBgColor)
-                    cornerRadius = 32f
-                    setStroke(3, primaryColor)
+                    cornerRadius = dpF(28f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), palette.outlineVariant)
                 }
                 isClickable = true
-                elevation = 20f
+                elevation = dpF(12f)
             }
 
             val title = android.widget.TextView(context).apply {
@@ -708,6 +1020,9 @@ class OverlayManager(private val context: Context) {
         hideUndoButton()
         hidePreviewDialog()
         hideSnippetSelection()
+        hideStreamingCard()
+        hideAutocomplete()
+        hideSelectionToolbar()
     }
 }
 

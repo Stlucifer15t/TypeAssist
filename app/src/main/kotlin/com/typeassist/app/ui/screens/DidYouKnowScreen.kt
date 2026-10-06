@@ -208,7 +208,7 @@ fun FeatureDiscoveryCard(feature: DiscoveryFeature) {
 @Composable
 fun StaticExamplesBox(examples: List<Pair<String, String>>) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth().height(140.dp)
     ) {
@@ -258,7 +258,7 @@ fun LivePreviewBox(examples: List<Pair<String, String>>) {
     }
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth().height(140.dp)
     ) {

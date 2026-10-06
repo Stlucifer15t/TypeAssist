@@ -95,6 +95,97 @@ class CloudflareApiClient(private val client: OkHttpClient) : AiProvider {
         })
     }
 
+    /**
+     * Streams Workers AI output with "stream": true (SSE, one `data: {"response": …}`
+     * frame per token), reporting accumulated text via [onChunk] (OkHttp worker thread).
+     */
+    fun streamCloudflare(
+        accountId: String,
+        apiToken: String,
+        model: String,
+        prompt: String,
+        userText: String,
+        timeoutSeconds: Long,
+        onChunk: (String) -> Unit,
+        callback: (Result<String>) -> Unit
+    ) {
+        val jsonBody = JSONObject()
+        val messagesArray = JSONArray()
+
+        val systemMessage = JSONObject()
+        systemMessage.put("role", "system")
+        systemMessage.put("content", prompt)
+        messagesArray.put(systemMessage)
+
+        val userMessage = JSONObject()
+        userMessage.put("role", "user")
+        userMessage.put("content", userText)
+        messagesArray.put(userMessage)
+
+        jsonBody.put("messages", messagesArray)
+        jsonBody.put("stream", true)
+
+        val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
+        val url = "https://api.cloudflare.com/client/v4/accounts/$accountId/ai/run/$model"
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer $apiToken")
+            .post(requestBody)
+            .build()
+
+        client.newBuilder()
+            .connectTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .writeTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .build()
+            .newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                callback(Result.failure(e))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    if (!it.isSuccessful) {
+                        val errorBody = it.body?.string()
+                        callback(Result.failure(IOException(getErrorMessage(it.code, errorBody))))
+                        return
+                    }
+                    var accumulated = ""
+                    var delivered = false
+                    try {
+                        val reader = it.body?.charStream()?.buffered() ?: throw IOException("Empty response body")
+                        var line = reader.readLine()
+                        while (line != null) {
+                            if (line.startsWith("data:")) {
+                                val payload = line.removePrefix("data:").trim()
+                                if (payload.isNotEmpty()) {
+                                    if (payload == "[DONE]") break
+                                    try {
+                                        val json = JSONObject(payload)
+                                        val piece = json.optString("response").orEmpty()
+                                        if (piece.isNotEmpty()) {
+                                            accumulated += piece
+                                            delivered = true
+                                            onChunk(accumulated)
+                                        }
+                                    } catch (_: Exception) {
+                                        // Skip metadata frames.
+                                    }
+                                }
+                            }
+                            line = reader.readLine()
+                        }
+                        if (!delivered) throw IOException("No content received from stream")
+                        callback(Result.success(cleanModelResponse(accumulated)))
+                    } catch (e: Exception) {
+                        callback(Result.failure(e))
+                    }
+                }
+            }
+        })
+    }
+
     private fun getErrorMessage(code: Int, body: String?): String {
         return try {
             val json = JSONObject(body ?: "")

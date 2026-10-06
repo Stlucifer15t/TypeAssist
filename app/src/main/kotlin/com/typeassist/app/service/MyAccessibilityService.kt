@@ -23,6 +23,7 @@ import com.typeassist.app.api.LocalLlmClient
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.LoadingIndicatorStyle
+import com.typeassist.app.data.UsageTracker
 import okhttp3.*
 import java.util.regex.Pattern
 import android.util.Log
@@ -64,6 +65,8 @@ class MyAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d(TAG, "JNI Test: ${stringFromJNI()}")
+        HistoryManager.init(applicationContext)
+        UsageTracker.init(applicationContext)
         overlayManager = OverlayManager(this)
         overlayManager.onUndoAction = { performUndo() }
         overlayManager.onOverlayShown = { 
@@ -114,10 +117,6 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isDarkMode(): Boolean {
-        return (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
-    }
-
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event == null) return
 
@@ -130,6 +129,11 @@ class MyAccessibilityService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.refresh()
+            return
+        }
+
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED) {
+            handleSelectionChanged(event)
             return
         }
 
@@ -177,6 +181,11 @@ class MyAccessibilityService : AccessibilityService() {
                     return
                 }
 
+                // Typing dismisses the selection toolbar and any stale autocomplete hint;
+                // if nothing else matches below, autocomplete is re-evaluated at the end.
+                overlayManager.hideAutocomplete()
+                overlayManager.hideSelectionToolbar()
+
                 // --- 0. Global Inline Transformation ---
                 val globalTriggerPattern = config.globalTriggerPattern
                 if (globalTriggerPattern.contains("%") && globalTriggerPattern.length >= 3) {
@@ -199,7 +208,7 @@ class MyAccessibilityService : AccessibilityService() {
 
                             val systemPrompt = "Rewrite the following text according to this instruction: $instruction. Return ONLY the rewritten text, no explanations, no chat."
                             
-                        performAICall(config, systemPrompt, contextText) { result ->
+                        performAICall(config, systemPrompt, contextText, config.globalTriggerPattern) { result ->
                             overlayManager.hideLoading()
                             result.onSuccess { aiText ->
                                 processAiResult(config, inputNode, currentText, aiText, replaceWhole = true)
@@ -232,7 +241,7 @@ class MyAccessibilityService : AccessibilityService() {
                                 // Show selection overlay
                                 Log.d(TAG, "Showing selection overlay for '${s.trigger}' with ${variations.size} variations")
                                 pendingTriggerRunnable?.let { debounceHandler.removeCallbacks(it) }
-                                overlayManager.showSnippetSelection(s.trigger, variations, isDarkMode()) { selected ->
+                                overlayManager.showSnippetSelection(s.trigger, variations, overlayManager.paletteFor(config)) { selected ->
                                     Log.d(TAG, "Variation selected: '$selected'")
                                     if (!inputNode.refresh()) {
                                         Log.e(TAG, "Could not refresh input node for insertion")
@@ -373,7 +382,7 @@ class MyAccessibilityService : AccessibilityService() {
                             overlayManager.showLoading(config)
                             overlayManager.hideUndoButton()
 
-                            performAICall(config, inlinePromptTemplate, userPrompt) { result ->
+                            performAICall(config, inlinePromptTemplate, userPrompt, inlinePattern) { result ->
                                 overlayManager.hideLoading()
                                 result.onSuccess { aiText ->
                                     Log.d(TAG, "AI Success: ${aiText.take(50)}...")
@@ -412,9 +421,9 @@ class MyAccessibilityService : AccessibilityService() {
                                 if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
 
                                 overlayManager.showLoading(config)
-                                overlayManager.hideUndoButton() 
+                                overlayManager.hideUndoButton()
 
-                                performAICall(config, prompt, textToProcess) { result ->
+                                performAICall(config, prompt, textToProcess, pattern) { result ->
                                     overlayManager.hideLoading()
                                     result.onSuccess { aiText ->
                                         Log.d(TAG, "AI Success: ${aiText.take(50)}...")
@@ -432,6 +441,9 @@ class MyAccessibilityService : AccessibilityService() {
                         return
                     }
                 }
+
+                // -- Trigger autocomplete (nothing else matched) --
+                maybeShowAutocomplete(inputNode, currentText, config)
             } catch (e: Exception) {
                 Log.e(TAG, "Error in onAccessibilityEvent", e)
             }
@@ -447,12 +459,11 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
-        val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-        val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val palette = overlayManager.paletteFor(config)
         val wordCount = cleanedText.split("\\s+".toRegex()).size
 
         if (wordCount > 15 && config.enablePreviewDialog) {
-            overlayManager.showPreviewDialog(cleanedText, isDarkMode) {
+            overlayManager.showPreviewDialog(cleanedText, palette) {
                 pasteText(node, cleanedText)
                 overlayManager.showUndoButton(config)
             }
@@ -480,18 +491,248 @@ class MyAccessibilityService : AccessibilityService() {
     }
 
     private fun performAICall(config: AppConfig, prompt: String, userText: String, callback: (Result<String>) -> Unit) {
-        Log.d(TAG, "Performing AI Call: Provider=${config.provider}, Timeout=${config.apiTimeoutSeconds}s")
-        val provider: AiProvider = when (config.provider) {
-            "cloudflare" -> cloudflareApiClient
-            "custom" -> customApiClient
-            "local" -> localLlmClient
-            else -> geminiApiClient
-        }
-        provider.generateResponse(prompt, userText, config, callback)
+        performAICall(config, prompt, userText, "", callback)
     }
 
-    private fun findTriggerIndex(text: String, trigger: String, allowAnywhere: Boolean, ignoreWhitespace: Boolean): Int {
-        if (!allowAnywhere) {
+    /**
+     * Runs an AI request with live streaming for cloud providers: chunks update the
+     * floating streaming card as they arrive, and the result is recorded for the
+     * usage dashboard. The local provider streams nothing and keeps its normal path.
+     */
+    private fun performAICall(
+        config: AppConfig,
+        prompt: String,
+        userText: String,
+        triggerLabel: String,
+        callback: (Result<String>) -> Unit
+    ) {
+        Log.d(TAG, "Performing AI Call: Provider=${config.provider}, Timeout=${config.apiTimeoutSeconds}s")
+        val model = when (config.provider) {
+            "cloudflare" -> config.cloudflareConfig.model
+            "custom" -> config.customApiConfig.model
+            "local" -> config.localLlmConfig.modelPath.substringAfterLast('/')
+            else -> config.model
+        }
+        val finish: (Result<String>) -> Unit = { result ->
+            val words = result.getOrNull()?.split(Regex("\\s+"))?.count { it.isNotBlank() } ?: 0
+            UsageTracker.record(config.provider, model, triggerLabel, words, result.isSuccess)
+            callback(result)
+        }
+        val streamState = booleanArrayOf(false)
+        fun handleChunk(accumulated: String) {
+            if (!streamState[0]) {
+                streamState[0] = true
+                overlayManager.hideLoading()
+                overlayManager.showStreamingCard(config)
+            }
+            overlayManager.updateStreamingText(accumulated)
+        }
+        when (config.provider) {
+            "cloudflare" -> cloudflareApiClient.streamCloudflare(
+                config.cloudflareConfig.accountId,
+                config.cloudflareConfig.apiToken,
+                config.cloudflareConfig.model,
+                prompt, userText, config.apiTimeoutSeconds,
+                onChunk = { acc -> handleChunk(acc) },
+                callback = { result ->
+                    overlayManager.hideStreamingCard()
+                    finish(result)
+                }
+            )
+            "custom" -> customApiClient.streamCustomApi(
+                config.customApiConfig.baseUrl,
+                config.customApiConfig.apiKey,
+                config.customApiConfig.model,
+                prompt, userText, config.apiTimeoutSeconds,
+                onChunk = { acc -> handleChunk(acc) },
+                callback = { result ->
+                    overlayManager.hideStreamingCard()
+                    finish(result)
+                }
+            )
+            "gemini" -> geminiApiClient.streamGemini(
+                config.apiKey,
+                config.model,
+                prompt, userText,
+                config.generationConfig.temperature,
+                config.generationConfig.topP,
+                config.apiTimeoutSeconds,
+                onChunk = { acc -> handleChunk(acc) },
+                callback = { result ->
+                    overlayManager.hideStreamingCard()
+                    finish(result)
+                }
+            )
+            else -> localLlmClient.generateResponse(prompt, userText, config, finish)
+        }
+    }
+
+    /**
+     * Shows a hint popup with commands whose pattern continues what the user is
+     * currently typing (the last word of the field). Tapping a hint completes the
+     * pattern, which then fires the normal debounced trigger flow.
+     */
+    private fun maybeShowAutocomplete(inputNode: AccessibilityNodeInfo, currentText: String, config: AppConfig) {
+        try {
+            if (overlayManager.isBusy()) {
+                overlayManager.hideAutocomplete()
+                return
+            }
+            val tail = currentText.substringAfterLast('\n').substringAfterLast(' ')
+            if (tail.isEmpty() || tail.length > 16) {
+                overlayManager.hideAutocomplete()
+                return
+            }
+            val candidates = config.triggers
+                .filter { it.pattern.length > tail.length && it.pattern.startsWith(tail) }
+                .take(4)
+            if (candidates.isEmpty()) {
+                overlayManager.hideAutocomplete()
+                return
+            }
+            val bounds = android.graphics.Rect()
+            inputNode.getBoundsInScreen(bounds)
+            overlayManager.showAutocomplete(
+                candidates.map { it.pattern to it.prompt },
+                overlayManager.paletteFor(config),
+                bounds.top
+            ) { pattern ->
+                if (inputNode.refresh()) {
+                    val newText = currentText.substring(0, currentText.length - tail.length) + pattern
+                    pasteText(inputNode, newText)
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Autocomplete error: ${e.message}")
+        }
+    }
+
+    private val selectionHandler = Handler(Looper.getMainLooper())
+    private var selectionPendingRunnable: Runnable? = null
+    @Volatile private var suppressSelectionEventsUntil = 0L
+
+    private fun loadConfigForOverlay(): AppConfig? {
+        val prefs = getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
+        val configJson = prefs.getString("config_json", null) ?: return null
+        return try {
+            val config = com.google.gson.GsonBuilder().create().fromJson(configJson, AppConfig::class.java)
+            LoadingIndicatorStyle.sanitize(config)
+            config
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun handleSelectionChanged(event: AccessibilityEvent) {
+        try {
+            if (System.currentTimeMillis() < suppressSelectionEventsUntil) return
+            if (overlayManager.isBusy()) {
+                overlayManager.hideSelectionToolbar()
+                return
+            }
+            val config = loadConfigForOverlay() ?: return
+            if (!config.isAppEnabled) return
+
+            val node = event.source ?: return
+            val selStart = node.textSelectionStart
+            val selEnd = node.textSelectionEnd
+            val text = node.text?.toString() ?: ""
+            if (selStart < 0 || selEnd <= selStart || selEnd > text.length || !node.isEditable || selEnd - selStart < 3) {
+                overlayManager.hideSelectionToolbar()
+                return
+            }
+            val bounds = android.graphics.Rect()
+            node.getBoundsInScreen(bounds)
+
+            selectionPendingRunnable?.let { selectionHandler.removeCallbacks(it) }
+            val runnable = Runnable {
+                if (!node.refresh()) return@Runnable
+                val start = node.textSelectionStart
+                val end = node.textSelectionEnd
+                val current = node.text?.toString() ?: return@Runnable
+                if (start < 0 || end <= start || end > current.length) return@Runnable
+                val selected = current.substring(start, end)
+                if (selected.isBlank()) return@Runnable
+                val actions = selectionActions(config) { prompt ->
+                    runSelectionAction(config, node, current, start, end, prompt)
+                }
+                overlayManager.showSelectionToolbar(actions, overlayManager.paletteFor(config), bounds.top)
+            }
+            selectionPendingRunnable = runnable
+            selectionHandler.postDelayed(runnable, 250)
+        } catch (e: Exception) {
+            Log.d(TAG, "Selection event error: ${e.message}")
+        }
+    }
+
+    /** Fixed quick actions, preferring the user's own prompts when the default commands exist. */
+    private fun selectionActions(config: AppConfig, run: (String) -> Unit): List<OverlayManager.SelectionAction> {
+        fun promptFor(pattern: String, fallback: String): String =
+            config.triggers.firstOrNull { it.pattern == pattern }?.prompt ?: fallback
+        return listOf(
+            OverlayManager.SelectionAction("Fix grammar") {
+                run(promptFor(".g", "Fix grammar, spelling, and punctuation. Return only the corrected text."))
+            },
+            OverlayManager.SelectionAction("Improve") {
+                run(promptFor(".improve", "Improve the writing quality and clarity. Return only the improved text."))
+            },
+            OverlayManager.SelectionAction("Translate") {
+                run(promptFor(".tr", "Translate to English. Return only the translated text."))
+            },
+            OverlayManager.SelectionAction("Ask AI") {
+                run("Give only the most relevant and complete answer about the selected text. Do not explain. Output only the answer.")
+            }
+        )
+    }
+
+    /** Replaces the selected range with the AI result; undo restores the whole field. */
+    private fun runSelectionAction(
+        config: AppConfig,
+        node: AccessibilityNodeInfo,
+        fullText: String,
+        start: Int,
+        end: Int,
+        prompt: String
+    ) {
+        val selected = fullText.substring(start, end)
+        if (selected.isBlank()) return
+        suppressSelectionEventsUntil = System.currentTimeMillis() + 2000
+        overlayManager.hideSelectionToolbar()
+        overlayManager.showLoading(config)
+        overlayManager.hideUndoButton()
+        originalTextCache = fullText
+        lastNode = node
+        undoCacheTimestamp = System.currentTimeMillis()
+        if (config.isHistoryEnabled) HistoryManager.add(fullText)
+
+        performAICall(config, prompt, selected, "selection") { result ->
+            overlayManager.hideLoading()
+            result.onSuccess { ai ->
+                val cleaned = cleanAiText(ai)
+                if (cleaned.isBlank()) {
+                    overlayManager.showToast("Model returned empty output — try a smarter model or increase max tokens")
+                    return@onSuccess
+                }
+                suppressSelectionEventsUntil = System.currentTimeMillis() + 2000
+                if (!node.refresh()) {
+                    overlayManager.showToast("Could not reach the text field")
+                    return@onSuccess
+                }
+                val nodeText = node.text?.toString()
+                val newText = if (nodeText != null && nodeText.length == fullText.length) {
+                    nodeText.substring(0, start) + cleaned + nodeText.substring(end)
+                } else {
+                    fullText.substring(0, start) + cleaned + fullText.substring(end)
+                }
+                pasteText(node, newText)
+                overlayManager.showUndoButton(config)
+            }.onFailure {
+                overlayManager.showToast(it.message ?: "Unknown error")
+            }
+        }
+    }
+
+    private fun findTriggerIndex(text: String, trigger: String, allowAnywhere: Boolean, ignoreWhitespace: Boolean): Int {        if (!allowAnywhere) {
             if (!text.endsWith(trigger)) return -1
             val triggerStartIndex = text.length - trigger.length
             if (!ignoreWhitespace && triggerStartIndex > 0 && !text[triggerStartIndex - 1].isWhitespace()) return -1

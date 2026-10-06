@@ -14,7 +14,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.HistoryManager
+import com.typeassist.app.data.UsageTracker
 import com.typeassist.app.ui.AppTheme
+import com.typeassist.app.ui.ThemeController
 import com.typeassist.app.ui.TypeAssistApp
 import com.typeassist.app.ui.components.UpdateDialog
 import com.typeassist.app.data.model.GitHubRelease
@@ -34,6 +38,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         updateRepository = UpdateRepository(this)
+        HistoryManager.init(applicationContext)
+        UsageTracker.init(applicationContext)
 
         if (BuildConfig.SHOW_UPDATES) {
             loadCachedUpdateInfo()

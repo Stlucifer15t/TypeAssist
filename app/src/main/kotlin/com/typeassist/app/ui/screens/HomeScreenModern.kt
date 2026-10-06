@@ -50,13 +50,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.typeassist.app.BuildConfig
@@ -310,6 +311,22 @@ fun HomeScreen(
                             onClick = { onNavigate("test") }
                         )
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DashboardQuickAction(
+                            modifier = Modifier.weight(1f),
+                            title = "Usage",
+                            detail = "Requests & words",
+                            icon = Icons.Default.BarChart,
+                            onClick = { onNavigate("usage") }
+                        )
+                        DashboardQuickAction(
+                            modifier = Modifier.weight(1f),
+                            title = "Guide",
+                            detail = "How it works",
+                            icon = Icons.Default.MenuBook,
+                            onClick = { onNavigate("guide") }
+                        )
+                    }
                 }
             }
 
@@ -393,28 +410,24 @@ private fun ServiceHeroCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(
-                Brush.linearGradient(
-                    listOf(Color(0xFF332B82), Color(0xFF5B4BDB), Color(0xFF197D79))
-                )
-            )
+            .background(MaterialTheme.colorScheme.primaryContainer)
             .padding(22.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("PROMPT AI SERVICE", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Text("PROMPT AI SERVICE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
                 Spacer(Modifier.height(5.dp))
-                Text("Ready when you type.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Ready when you type.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Switch(
                 checked = enabled,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Color(0xFF60D6B6),
-                    uncheckedThumbColor = Color.White,
-                    uncheckedTrackColor = Color.White.copy(alpha = 0.28f),
-                    uncheckedBorderColor = Color.White.copy(alpha = 0.6f)
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    uncheckedTrackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f),
+                    uncheckedBorderColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
             )
         }
@@ -428,16 +441,21 @@ private fun ServiceHeroCard(
                 if (enabled) "ACTIVE" else "PAUSED",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.18f), MaterialTheme.shapes.small)
+                    .background(MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.14f), MaterialTheme.shapes.small)
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             )
-            Text("$provider  ·  ${model.ifBlank { "No model selected" }}", color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            Text(
+                "$provider  ·  ${model.ifBlank { "No model selected" }}",
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1
+            )
         }
         if (!hasPermission) {
             Spacer(Modifier.height(12.dp))
-            Text("Accessibility permission is needed to process text.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+            Text("Accessibility permission is needed to process text.", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -453,8 +471,8 @@ private fun DashboardQuickAction(
     Card(
         modifier = modifier.clickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 15.dp),

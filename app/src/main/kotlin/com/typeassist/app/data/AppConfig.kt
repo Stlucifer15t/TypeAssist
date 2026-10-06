@@ -2,6 +2,22 @@ package com.typeassist.app.data
 
 import java.io.Serializable
 
+/** App-wide appearance options stored in [AppConfig.appThemeMode]. */
+object AppThemeMode {
+    const val SYSTEM = "system"
+    const val LIGHT = "light"
+    const val DARK = "dark"
+    const val AMOLED = "amoled"
+
+    val ALL = listOf(SYSTEM, LIGHT, DARK, AMOLED)
+
+    /** Returns a valid mode for any raw value (older configs, manual JSON edits…). */
+    fun sanitize(raw: String?): String {
+        val value = raw?.lowercase()?.trim()
+        return if (value in ALL) value!! else SYSTEM
+    }
+}
+
 data class AppConfig(
     var isAppEnabled: Boolean = false,
     var provider: String = "gemini", // "gemini", "cloudflare", "custom", "local"
@@ -33,7 +49,9 @@ data class AppConfig(
     var enablePreviewDialog: Boolean = false,
     var allowTriggerAnywhere: Boolean = false,
     var ignorePrecedingWhitespace: Boolean = false,
-    var apiTimeoutSeconds: Long = 30L
+    var apiTimeoutSeconds: Long = 30L,
+    var appThemeMode: String = AppThemeMode.SYSTEM,
+    var useDynamicColor: Boolean = true
 ) : Serializable
 
 data class CloudflareConfig(
@@ -52,6 +70,62 @@ data class CustomApiConfig(
     var apiKey: String = "",
     var model: String = "gpt-3.5-turbo"
 ) : Serializable
+
+/** Normalised base-URL part of a custom API identity: same endpoint regardless of trailing path noise. */
+private fun normaliseBaseUrl(baseUrl: String): String {
+    return baseUrl.trim()
+        .removeSuffix("/")
+        .removeSuffix("/chat/completions")
+        .removeSuffix("/models")
+        .removeSuffix("/")
+        .lowercase()
+}
+
+/** Unique identity of a saved custom profile: same base URL + API key = same profile, model not included. */
+fun CustomApiConfig.identityKey(): String =
+    normaliseBaseUrl(baseUrl) + "\u0000" + apiKey.trim()
+
+/** Unique identity of a saved Gemini profile: the API key alone identifies it. */
+fun SavedGeminiConfig.identityKey(): String = apiKey.trim()
+
+/** Unique identity of a saved Cloudflare profile: account ID + token. */
+fun CloudflareConfig.identityKey(): String =
+    accountId.trim() + "\u0000" + apiToken.trim()
+
+/**
+ * Collapses duplicate saved profiles so that only ONE entry exists per identity
+ * (custom: base URL + key, Gemini: key, Cloudflare: account + token, local: model path).
+ * When duplicates exist, the LAST entry wins (it is the most recently saved, so its
+ * model is the current one) and keeps the position of the first occurrence, so the
+ * list order stays stable. Changing the model on the same endpoint therefore just
+ * overlays the existing profile instead of adding another row.
+ */
+fun mergeDuplicateProfiles(config: AppConfig): AppConfig {
+    var changed = false
+
+    fun <T> dedupe(entries: List<T>, keyOf: (T) -> String): MutableList<T> {
+        val positions = LinkedHashMap<String, T>()
+        for (entry in entries) {
+            val key = keyOf(entry)
+            if (positions.containsKey(key)) changed = true
+            // LinkedHashMap.put keeps the original position, overwriting the value.
+            positions[key] = entry
+        }
+        return positions.values.toMutableList()
+    }
+
+    val custom = dedupe(config.savedCustomConfigs.orEmpty()) { it.identityKey() }
+    val gemini = dedupe(config.savedGeminiConfigs.orEmpty()) { it.identityKey() }
+    val cloudflare = dedupe(config.savedCloudflareConfigs.orEmpty()) { it.identityKey() }
+    val local = dedupe(config.savedLocalModels.orEmpty()) { it.trim() }
+
+    return if (changed) config.copy(
+        savedCustomConfigs = custom,
+        savedGeminiConfigs = gemini,
+        savedCloudflareConfigs = cloudflare,
+        savedLocalModels = local
+    ) else config
+}
 
 data class LocalLlmConfig(
     var modelPath: String = "",
@@ -139,6 +213,8 @@ fun createDefaultConfig(): AppConfig {
         enablePreviewDialog = false,
         allowTriggerAnywhere = false,
         ignorePrecedingWhitespace = false,
-        apiTimeoutSeconds = 30L
+        apiTimeoutSeconds = 30L,
+        appThemeMode = AppThemeMode.SYSTEM,
+        useDynamicColor = true
     )
 }

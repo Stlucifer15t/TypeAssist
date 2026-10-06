@@ -73,8 +73,11 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
     }
 
     fun saveConfig(newConfig: AppConfig) {
-        config = newConfig
-        prefs.edit().putString("config_json", gson.toJson(newConfig)).apply()
+        val sanitized = newConfig.copy(appThemeMode = com.typeassist.app.data.AppThemeMode.sanitize(newConfig.appThemeMode))
+        val merged = com.typeassist.app.data.mergeDuplicateProfiles(sanitized)
+        config = merged
+        com.typeassist.app.ui.ThemeController.syncFrom(merged)
+        prefs.edit().putString("config_json", gson.toJson(merged)).apply()
     }
 
     // Custom navigate function to track previous screen
@@ -142,6 +145,7 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
                 }
                 "json" -> JsonScreen(config, { saveConfig(it) }, { navigateTo("home") }) // Use custom navigate
                 "history" -> HistoryScreen({ navigateTo("home") }) // Use custom navigate
+                "usage" -> UsageScreen(onBack = { navigateTo("home") })
                 "snippets" -> SnippetsScreen(config, { saveConfig(it) }, { navigateTo("home") })
                 "guide" -> GuideScreen({ navigateTo("home") })
                 "did_you_know" -> DidYouKnowScreen(onFinished = {

@@ -24,6 +24,13 @@
 
 ### Compared to upstream:
 
+- **⚡ Streaming responses** — AI output appears live, token by token, in a floating card while Gemini / OpenAI-compatible / Cloudflare providers generate. No more staring at the spinner.
+- **💡 Trigger autocomplete** — start typing a command (`.t`…) and a hint popup above the keyboard lists the matching commands with descriptions; tap one to complete and run it.
+- **✂️ Selection toolbar** — select text in any app and a floating M3 toolbar appears: Fix grammar · Improve · Translate · Ask AI. Results replace only the selection (undo-able).
+- **📊 Usage dashboard** — Home → Usage: requests, words generated, success rate, top commands and models. All local, 30-day rolling window.
+- **🎨 Material 3 theme system** — Settings → General → *Appearance*: choose **System / Light / Dark / AMOLED** (true-black for OLED screens). Optional **dynamic colour** (Material You wallpaper colours) on Android 12+. Applied instantly across the app *and* the floating overlays (preview card, snippet picker, undo chip).
+- **🧹 One profile per endpoint** — saving a provider (Gemini / custom API / Cloudflare) with the same URL + key no longer piles up duplicate rows when you change models; the existing profile is updated in place. Old duplicates are merged automatically on first launch.
+- **🕘 History lasts 1 hour** — up from 5 minutes, and it now survives app restarts (persisted, capped at 200 items).
 - **🎨 New App Icon** — Rebranded to **P** for Prompt AI with purple-to-blue gradient and sparkle accent. All mipmap densities + monochrome + Play Store icon updated.
 - **💫 Loading Indicator Styles** — No more bland spinner! Choose from 7 styles in Settings → General → Floating controls:
   - `Classic` - Simple spinner
@@ -37,7 +44,8 @@
 - **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style, including the neon ring's glow.
 - **📏 Indicator Size** — Settings → General → *Indicator size*: 50%–200% slider that scales the whole overlay indicator (100% is the original size).
 - Both settings live in `AppConfig` (`loadingIndicatorColor`, `loadingIndicatorSizePercent`) and are backward compatible: configs saved before them fall back to white / 100%.
-- **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) now only **build Full APK and upload unsigned artifact** (`app-full-release-unsigned.apk`). No `SIGNING_KEY_*` secrets required — download artifact and sign with MT Manager.
+- **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) build the **Full APK and upload it signed and ready to install** (artifact `PromptAI-Full`), no secrets required.
+- **🔑 Public signing key** — The repo ships a committed release keystore (`keystore/release.p12`, PKCS12, alias `promptai`, password `promptai`) so CI can sign automatically. **This key is public by design** — anyone can build an APK that installs over this fork's releases. For private distribution, add your own untracked `keystore.properties` (keyAlias/keyPassword/storeFile/storePassword) and the build will use that instead.
 - **🧹 UI Cleanup** — Removed `Support development` (Binance/USDT) section, `Twitter`, and `Telegram community` links from Home screen. `Made with care` now only shows **Source code on GitHub → https://github.com/Stlucifer15t/TypeAssist**
 - **⚙️ Config** — Added `loadingIndicatorStyle` to `AppConfig` with backward-compatible fallback.
 
