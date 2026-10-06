@@ -32,9 +32,9 @@
   - `Bars` - Equalizer bars
   - `Typing` - iMessage-style typing bubble
   - `Pill` - Rounded pill with "AI thinking..."
-  - `Neon ring` - Glowing neon tube that sweeps the ring: faded trail, soft halo, bright leading head and a breathing glow
+  - `Neon ring` - Glowing neon tube that sweeps the ring: faded trail, soft halo, white-hot core, bright leading head and a breathing glow. Keeps its own authentic electric-cyan colour (picker locked) so it always stays true to neon
   - Live preview in settings + fully animated overlay via `OverlayManager`
-- **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style, including the neon ring's glow.
+- **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style except the neon ring, which keeps its authentic cyan.
 - **📏 Indicator Size** — Settings → General → *Indicator size*: 50%–200% slider that scales the whole overlay indicator (100% is the original size).
 - Both settings live in `AppConfig` (`loadingIndicatorColor`, `loadingIndicatorSizePercent`) and are backward compatible: configs saved before them fall back to white / 100%.
 - **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) now only **build Full APK and upload unsigned artifact** (`app-full-release-unsigned.apk`). No `SIGNING_KEY_*` secrets required — download artifact and sign with MT Manager.

@@ -71,7 +71,7 @@ class OverlayManager(private val context: Context) {
             clearLoadingAnimators()
             val rawStyle = try { config.loadingIndicatorStyle } catch (_: Exception) { "classic" }
             val style = (rawStyle as? String ?: "classic").ifBlank { "classic" }
-            indicatorColor = LoadingIndicatorStyle.sanitizeColor(config.loadingIndicatorColor)
+            indicatorColor = LoadingIndicatorStyle.effectiveColor(style, config.loadingIndicatorColor)
             indicatorScale = LoadingIndicatorStyle.scaleOf(config.loadingIndicatorSizePercent)
             val content = when (style) {
                 "dots" -> createDotsView()
@@ -752,6 +752,12 @@ private class NeonRingView(
         this.strokeWidth = this@NeonRingView.strokeWidth
     }
 
+    private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        this.strokeWidth = this@NeonRingView.strokeWidth * 0.45f
+    }
+
     private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         this.color = LoadingIndicatorStyle.contrastColor(this@NeonRingView.color)
@@ -781,6 +787,12 @@ private class NeonRingView(
             ),
             floatArrayOf(0f, 0.3f, 0.85f, 1f)
         )
+        corePaint.shader = SweepGradient(
+            w / 2f,
+            h / 2f,
+            intArrayOf(0x00FFFFFF, 0x40FFFFFF, 0xB3FFFFFF.toInt(), 0xFFFFFFFF.toInt()),
+            floatArrayOf(0f, 0.3f, 0.85f, 1f)
+        )
         val radians = Math.toRadians(sweepAngle.toDouble())
         headX = arcRect.centerX() + arcRect.width() / 2f * cos(radians).toFloat()
         headY = arcRect.centerY() + arcRect.height() / 2f * sin(radians).toFloat()
@@ -799,6 +811,10 @@ private class NeonRingView(
 
         arcPaint.setShadowLayer(strokeWidth * 2f * glow, 0f, 0f, color)
         canvas.drawArc(arcRect, 0f, sweepAngle, false, arcPaint)
+
+        // White-hot core running through the middle of the tube.
+        corePaint.setShadowLayer(strokeWidth * glow, 0f, 0f, color)
+        canvas.drawArc(arcRect, 0f, sweepAngle, false, corePaint)
 
         headPaint.setShadowLayer(strokeWidth * 2.5f * glow, 0f, 0f, color)
         canvas.drawCircle(headX, headY, strokeWidth * 0.75f, headPaint)
