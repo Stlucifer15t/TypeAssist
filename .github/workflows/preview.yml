@@ -33,6 +33,6 @@ jobs:
       - name: Upload Full APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PromptAI-preview-Full-unsigned
-          path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
+          name: PromptAI-preview-Full
+          path: app/build/outputs/apk/full/release/*.apk
           if-no-files-found: error

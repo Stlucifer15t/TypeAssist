@@ -44,7 +44,8 @@
 - **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style, including the neon ring's glow.
 - **📏 Indicator Size** — Settings → General → *Indicator size*: 50%–200% slider that scales the whole overlay indicator (100% is the original size).
 - Both settings live in `AppConfig` (`loadingIndicatorColor`, `loadingIndicatorSizePercent`) and are backward compatible: configs saved before them fall back to white / 100%.
-- **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) now only **build Full APK and upload unsigned artifact** (`app-full-release-unsigned.apk`). No `SIGNING_KEY_*` secrets required — download artifact and sign with MT Manager.
+- **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) build the **Full APK and upload it signed and ready to install** (artifact `PromptAI-Full`), no secrets required.
+- **🔑 Public signing key** — The repo ships a committed release keystore (`keystore/release.p12`, PKCS12, alias `promptai`, password `promptai`) so CI can sign automatically. **This key is public by design** — anyone can build an APK that installs over this fork's releases. For private distribution, add your own untracked `keystore.properties` (keyAlias/keyPassword/storeFile/storePassword) and the build will use that instead.
 - **🧹 UI Cleanup** — Removed `Support development` (Binance/USDT) section, `Twitter`, and `Telegram community` links from Home screen. `Made with care` now only shows **Source code on GitHub → https://github.com/Stlucifer15t/TypeAssist**
 - **⚙️ Config** — Added `loadingIndicatorStyle` to `AppConfig` with backward-compatible fallback.
 
