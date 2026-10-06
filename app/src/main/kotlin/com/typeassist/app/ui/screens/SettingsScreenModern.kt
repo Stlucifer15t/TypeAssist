@@ -1166,7 +1166,7 @@ private fun ModernSwitchRow(
             .toggleable(
                 value = checked,
                 role = Role.Switch,
-                onCheckedChange = onCheckedChange
+                onValueChange = onCheckedChange
             )
             .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

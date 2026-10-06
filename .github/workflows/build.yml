@@ -36,7 +36,16 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Build Full release variant
-        run: ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
+        run: |
+          set -o pipefail
+          ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            grep -E "^e: |error:|FAILURE: " build.log | head -60 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          fi
+          exit $exit_code
 
       - name: Upload build log
         if: always()
