@@ -145,6 +145,7 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
                 }
                 "json" -> JsonScreen(config, { saveConfig(it) }, { navigateTo("home") }) // Use custom navigate
                 "history" -> HistoryScreen({ navigateTo("home") }) // Use custom navigate
+                "usage" -> UsageScreen(onBack = { navigateTo("home") })
                 "snippets" -> SnippetsScreen(config, { saveConfig(it) }, { navigateTo("home") })
                 "guide" -> GuideScreen({ navigateTo("home") })
                 "did_you_know" -> DidYouKnowScreen(onFinished = {

@@ -24,6 +24,10 @@
 
 ### Compared to upstream:
 
+- **⚡ Streaming responses** — AI output appears live, token by token, in a floating card while Gemini / OpenAI-compatible / Cloudflare providers generate. No more staring at the spinner.
+- **💡 Trigger autocomplete** — start typing a command (`.t`…) and a hint popup above the keyboard lists the matching commands with descriptions; tap one to complete and run it.
+- **✂️ Selection toolbar** — select text in any app and a floating M3 toolbar appears: Fix grammar · Improve · Translate · Ask AI. Results replace only the selection (undo-able).
+- **📊 Usage dashboard** — Home → Usage: requests, words generated, success rate, top commands and models. All local, 30-day rolling window.
 - **🎨 Material 3 theme system** — Settings → General → *Appearance*: choose **System / Light / Dark / AMOLED** (true-black for OLED screens). Optional **dynamic colour** (Material You wallpaper colours) on Android 12+. Applied instantly across the app *and* the floating overlays (preview card, snippet picker, undo chip).
 - **🧹 One profile per endpoint** — saving a provider (Gemini / custom API / Cloudflare) with the same URL + key no longer piles up duplicate rows when you change models; the existing profile is updated in place. Old duplicates are merged automatically on first launch.
 - **🕘 History lasts 1 hour** — up from 5 minutes, and it now survives app restarts (persisted, capped at 200 items).

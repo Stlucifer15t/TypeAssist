@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.typeassist.app.BuildConfig
@@ -307,6 +309,22 @@ fun HomeScreen(
                             detail = "Try commands",
                             icon = Icons.Default.Science,
                             onClick = { onNavigate("test") }
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DashboardQuickAction(
+                            modifier = Modifier.weight(1f),
+                            title = "Usage",
+                            detail = "Requests & words",
+                            icon = Icons.Default.BarChart,
+                            onClick = { onNavigate("usage") }
+                        )
+                        DashboardQuickAction(
+                            modifier = Modifier.weight(1f),
+                            title = "Guide",
+                            detail = "How it works",
+                            icon = Icons.Default.MenuBook,
+                            onClick = { onNavigate("guide") }
                         )
                     }
                 }
