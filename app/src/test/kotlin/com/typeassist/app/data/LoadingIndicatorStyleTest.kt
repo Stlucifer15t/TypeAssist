@@ -74,6 +74,25 @@ class LoadingIndicatorStyleTest {
     }
 
     @Test
+    fun theNeonRingKeepsItsAuthenticColour() {
+        // Neon ignores the picked colour entirely.
+        assertEquals(
+            LoadingIndicatorStyle.NEON_COLOR,
+            LoadingIndicatorStyle.effectiveColor("neon", 0xFFFB7185.toInt())
+        )
+        // Every other style follows the picker.
+        assertEquals(
+            0xFFFB7185.toInt(),
+            LoadingIndicatorStyle.effectiveColor("dots", 0xFFFB7185.toInt())
+        )
+        // Legacy 0 still falls back to the default for non-neon styles.
+        assertEquals(
+            LoadingIndicatorStyle.DEFAULT_COLOR,
+            LoadingIndicatorStyle.effectiveColor("classic", 0)
+        )
+    }
+
+    @Test
     fun presetsAreAllOpaqueAndInsideTheRange() {
         assertTrue(LoadingIndicatorStyle.PRESET_COLORS.isNotEmpty())
         LoadingIndicatorStyle.PRESET_COLORS.forEach { preset ->

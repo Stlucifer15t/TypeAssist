@@ -247,7 +247,7 @@ private fun GeneralSettingsTabModern(
             LoadingStyleOption("bars", "Bars", "Equalizer bars animation"),
             LoadingStyleOption("typing", "Typing", "iMessage-style typing bubble"),
             LoadingStyleOption("pill", "Pill", "Rounded pill with text"),
-            LoadingStyleOption("neon", "Neon ring", "Glowing ring loader")
+            LoadingStyleOption("neon", "Neon ring", "Glowing ring with its own authentic neon colour")
         )
     }
 
@@ -346,7 +346,9 @@ private fun GeneralSettingsTabModern(
                     ) {
                         LoadingStylePreview(
                             styleId = loadingStyle,
-                            color = Color(indicatorColor),
+                            color = Color(
+                                LoadingIndicatorStyle.effectiveColor(loadingStyle, indicatorColor)
+                            ),
                             scale = previewScale
                         )
                     }
@@ -356,14 +358,43 @@ private fun GeneralSettingsTabModern(
     }
 
     if (enableLoadingOverlay) {
-        IndicatorColorSection(
-            color = indicatorColor,
-            onColorChange = { picked ->
-                val safe = LoadingIndicatorStyle.ensureOpaque(picked)
-                indicatorColor = safe
-                onSave(config.copy(loadingIndicatorColor = safe))
+        if (loadingStyle == "neon") {
+            // The neon ring keeps its authentic glow, so the picker is locked for it.
+            ModernSettingsSection(
+                title = "Indicator colour",
+                description = "Locked for the neon ring so it always stays true to neon."
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(LoadingIndicatorStyle.NEON_COLOR))
+                            .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    )
+                    Column {
+                        Text("Electric cyan", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Other styles still use the colour you pick below.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
-        )
+        } else {
+            IndicatorColorSection(
+                color = indicatorColor,
+                onColorChange = { picked ->
+                    val safe = LoadingIndicatorStyle.ensureOpaque(picked)
+                    indicatorColor = safe
+                    onSave(config.copy(loadingIndicatorColor = safe))
+                }
+            )
+        }
 
         ModernSettingsSection(
             title = "Indicator size",
@@ -1589,15 +1620,33 @@ private fun LoadingStylePreview(
                     val topLeft = Offset(inset, inset)
 
                     rotate(degrees = spin) {
-                        // Soft halo bleeding out from the lit part of the tube.
+                        // Layered halo passes fake a real tube glow on every API level.
                         drawArc(
-                            color = color.copy(alpha = 0.16f * glow),
+                            color = color.copy(alpha = 0.05f * glow),
                             startAngle = 0f,
                             sweepAngle = sweepAngle,
                             useCenter = false,
                             topLeft = topLeft,
                             size = arcSize,
-                            style = Stroke(width = stroke * 3f, cap = StrokeCap.Round)
+                            style = Stroke(width = stroke * 5f, cap = StrokeCap.Round)
+                        )
+                        drawArc(
+                            color = color.copy(alpha = 0.10f * glow),
+                            startAngle = 0f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke * 3.5f, cap = StrokeCap.Round)
+                        )
+                        drawArc(
+                            color = color.copy(alpha = 0.22f * glow),
+                            startAngle = 0f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke * 2f, cap = StrokeCap.Round)
                         )
                         // Dim track the light travels along.
                         drawArc(
@@ -1624,6 +1673,22 @@ private fun LoadingStylePreview(
                             topLeft = topLeft,
                             size = arcSize,
                             style = Stroke(width = stroke, cap = StrokeCap.Round)
+                        )
+                        // White-hot core of the tube.
+                        drawArc(
+                            brush = Brush.sweepGradient(
+                                0f to Color.White.copy(alpha = 0f),
+                                0.3f to Color.White.copy(alpha = 0.25f),
+                                0.85f to Color.White.copy(alpha = 0.7f),
+                                1f to Color.White,
+                                center = center
+                            ),
+                            startAngle = 0f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = stroke * 0.45f, cap = StrokeCap.Round)
                         )
                         // Bright leading head.
                         val radians = Math.toRadians(sweepAngle.toDouble())
