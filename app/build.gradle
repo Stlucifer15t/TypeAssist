@@ -4,13 +4,20 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.compose' version '2.0.0'
 }
 
-// --- MOVED THIS DOWN (Must be after plugins) ---
+// Keep local signing credentials out of source control. CI supplies these values
+// through environment variables; developers can use an ignored keystore.properties file.
 def keystorePropertiesFile = rootProject.file("keystore.properties")
 def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    keystorePropertiesFile.withInputStream { stream -> keystoreProperties.load(stream) }
 }
-// -----------------------------------------------
+def releaseStoreFile = System.getenv("ANDROID_KEYSTORE_PATH") ?: keystoreProperties.getProperty("storeFile")
+def releaseStoreType = System.getenv("ANDROID_KEYSTORE_TYPE") ?: keystoreProperties.getProperty("storeType") ?: "JKS"
+def releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: keystoreProperties.getProperty("storePassword")
+def releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: keystoreProperties.getProperty("keyAlias")
+def releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: keystoreProperties.getProperty("keyPassword")
+def releaseSigningConfigured = [releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+        .every { value -> value != null && !value.toString().trim().isEmpty() }
 
 android {
     namespace = 'com.typeassist.app'
@@ -20,8 +27,8 @@ android {
         applicationId = "com.typeassist.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 13
-        versionName = "4.2.2"
+        versionCode = 15
+        versionName = "4.4.5"
         vectorDrawables {
             useSupportLibrary = true
         }
@@ -65,15 +72,14 @@ android {
 
     ndkVersion = "27.0.12077973"
 
-    // Define Signing Config
     signingConfigs {
         release {
-            // Only try to sign if the file exists to prevent crashes if missing
-            if (keystorePropertiesFile.exists()) {
-                keyAlias = keystoreProperties['keyAlias']
-                keyPassword = keystoreProperties['keyPassword']
-                storeFile = file(keystoreProperties['storeFile'])
-                storePassword = keystoreProperties['storePassword']
+            if (releaseSigningConfigured) {
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                storeType = releaseStoreType
             }
         }
     }
@@ -87,7 +93,7 @@ android {
             minifyEnabled = true
             shrinkResources = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            if (keystorePropertiesFile.exists()) {
+            if (releaseSigningConfigured) {
                 signingConfig = signingConfigs.release
             }
         }

@@ -2,11 +2,13 @@ package com.typeassist.app.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,7 +17,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,12 +24,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -52,11 +55,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.typeassist.app.BuildConfig
@@ -64,6 +66,7 @@ import com.typeassist.app.MainActivity
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.ui.components.PageHeading
+import com.typeassist.app.ui.components.SectionHeading
 import com.typeassist.app.ui.components.SurfacePanel
 import com.typeassist.app.ui.components.TypingAnimationPreview
 
@@ -83,7 +86,9 @@ fun HomeScreen(
 
     DisposableEffect(lifecycleOwner, activity) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) hasPermission = activity.isAccessibilityEnabled()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasPermission = activity.isAccessibilityEnabled()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -92,15 +97,16 @@ fun HomeScreen(
     if (showTroubleshootDialog) {
         AlertDialog(
             onDismissRequest = { showTroubleshootDialog = false },
-            title = { Text("Service needs a refresh?") },
+            icon = { Icon(Icons.Default.Info, contentDescription = null) },
+            title = { Text("Refresh the service?") },
             text = {
-                Text("Android can occasionally pause an accessibility service. Turn Prompt AI off and on again in Accessibility settings if commands stop responding.")
+                Text("Android may occasionally pause an accessibility service. Turn Prompt AI off and on again in Accessibility settings if shortcuts stop responding.")
             },
             confirmButton = {
                 Button(onClick = {
                     showTroubleshootDialog = false
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                }) { Text("Open Android settings") }
+                }) { Text("Open settings") }
             },
             dismissButton = {
                 TextButton(onClick = { showTroubleshootDialog = false }) { Text("Not now") }
@@ -111,9 +117,10 @@ fun HomeScreen(
     if (showApiKeyDialog) {
         AlertDialog(
             onDismissRequest = { showApiKeyDialog = false },
+            icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
             title = { Text("Set up your AI provider") },
             text = {
-                Text("Add a provider key in Settings to use cloud AI. Offline tools such as snippets and local models can still work without a cloud key.")
+                Text("Add a provider in Settings to use cloud AI. Offline tools such as snippets and local models can still work without a cloud key.")
             },
             confirmButton = {
                 Button(onClick = {
@@ -152,9 +159,8 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .statusBarsPadding()
-                .navigationBarsPadding(),
-            contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 28.dp),
+                .statusBarsPadding(),
+            contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
@@ -163,11 +169,31 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("PROMPT AI", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
-                        Text("Write with confidence.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            "PROMPT AI",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.8.sp
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Write with confidence.",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.3).sp
+                        )
+                        Text(
+                            "Your writing workspace",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { showTroubleshootDialog = true }) {
+                        Icon(Icons.Default.Info, contentDescription = "Service help")
                     }
                     IconButton(onClick = { onNavigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurface)
+                        Icon(Icons.Default.Settings, contentDescription = "Open settings")
                     }
                 }
             }
@@ -185,24 +211,13 @@ fun HomeScreen(
                             Toast.makeText(context, "Enable Prompt AI Accessibility Service first.", Toast.LENGTH_SHORT).show()
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         } else {
-                            val isLocalReady = config.provider == "local" && config.localLlmConfig.modelPath.isNotBlank()
-                            val isCustomReady = config.provider == "custom"
-                            val needsApiKey = !isLocalReady && !isCustomReady && config.apiKey.isBlank()
+                            val localReady = config.provider == "local" && config.localLlmConfig.modelPath.isNotBlank()
+                            val customReady = config.provider == "custom"
+                            val needsApiKey = !localReady && !customReady && config.apiKey.isBlank()
                             if (needsApiKey) showApiKeyDialog = true else onToggle(true)
                         }
                     }
                 )
-            }
-
-            item {
-                TextButton(
-                    onClick = { showTroubleshootDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Info, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Troubleshoot the service")
-                }
             }
 
             if (!hasPermission) {
@@ -213,14 +228,15 @@ fun HomeScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(18.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
                             Column(Modifier.weight(1f)) {
                                 Text("One step left", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-                                Text("Enable Accessibility to let Prompt AI act in text fields.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                                Spacer(Modifier.height(3.dp))
+                                Text("Enable Accessibility so Prompt AI can work inside text fields.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
                             }
                             Text("Fix", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
                         }
@@ -232,21 +248,22 @@ fun HomeScreen(
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth().clickable {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(updateInfo.htmlUrl)))
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.htmlUrl)))
                         },
                         shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(18.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                             Column(Modifier.weight(1f)) {
-                                Text("Prompt AI ${updateInfo.tagName} is ready", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                Text("Tap to read what’s new.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text("Update ${updateInfo.tagName} available", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                Text("Open the release notes.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
                             }
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
                         }
                     }
                 }
@@ -255,8 +272,8 @@ fun HomeScreen(
             item {
                 PageHeading(
                     eyebrow = "YOUR WORKSPACE",
-                    title = "Quick access",
-                    description = "Jump straight to the tools you use most."
+                    title = "Pick up where you left off",
+                    description = "Your most-used writing tools, ready when you are."
                 )
             }
 
@@ -266,14 +283,14 @@ fun HomeScreen(
                         DashboardQuickAction(
                             modifier = Modifier.weight(1f),
                             title = "Commands",
-                            detail = "Edit shortcuts",
+                            detail = "Your AI shortcuts",
                             icon = Icons.Default.Edit,
                             onClick = { onNavigate("commands") }
                         )
                         DashboardQuickAction(
                             modifier = Modifier.weight(1f),
                             title = "Snippets",
-                            detail = "Your text blocks",
+                            detail = "Reusable text",
                             icon = Icons.Default.Favorite,
                             onClick = { onNavigate("snippets") }
                         )
@@ -283,15 +300,15 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f),
                             title = "History",
                             detail = "Recent changes",
-                            icon = Icons.AutoMirrored.Filled.List,
+                            icon = Icons.Default.History,
                             onClick = { onNavigate("history") }
                         )
                         DashboardQuickAction(
                             modifier = Modifier.weight(1f),
-                            title = "Settings",
-                            detail = "Providers & options",
-                            icon = Icons.Default.Settings,
-                            onClick = { onNavigate("settings") }
+                            title = "Command gallery",
+                            detail = "Browse ideas",
+                            icon = Icons.Default.AutoAwesome,
+                            onClick = { onNavigate("library") }
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -315,34 +332,28 @@ fun HomeScreen(
 
             item {
                 SurfacePanel {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("See it in action", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
+                    SectionHeading(
+                        title = "Start with a shortcut",
+                        subtitle = "Type one into any text field to begin."
+                    )
                     Spacer(Modifier.height(12.dp))
-                    TypingAnimationPreview()
+                    HomeCommandExample(".ta", "Ask AI")
+                    HomeCommandExample(".g", "Fix grammar")
+                    HomeCommandExample(".tr", "Translate to English")
+                    HomeCommandExample(".polite", "Make it professional")
+                    Spacer(Modifier.height(12.dp))
+                    TextButtonRow("Explore the guide") { onNavigate("guide") }
                 }
             }
 
             item {
                 SurfacePanel {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Text("Get started", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text("Type a message in any text field, add a shortcut, and let Prompt AI handle the change.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SectionHeading(
+                        title = "See it in action",
+                        subtitle = "A shortcut can turn a rough thought into clear writing."
+                    )
                     Spacer(Modifier.height(14.dp))
-                    Text("TRY A COMMAND", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(7.dp))
-                    HomeCommandExample(".ta", "Ask AI")
-                    HomeCommandExample(".g", "Fix grammar")
-                    HomeCommandExample(".tr", "Translate to English")
-                    HomeCommandExample(".polite", "Make it professional")
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = { onNavigate("guide") }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Explore the guide")
-                    }
+                    TypingAnimationPreview()
                 }
             }
 
@@ -395,23 +406,34 @@ private fun ServiceHeroCard(
             .clip(shape)
             .background(
                 Brush.linearGradient(
-                    listOf(Color(0xFF332B82), Color(0xFF5B4BDB), Color(0xFF197D79))
+                    listOf(Color(0xFF312C78), Color(0xFF5149C9), Color(0xFF13786F))
                 )
             )
             .padding(22.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("PROMPT AI SERVICE", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.74f), fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-                Spacer(Modifier.height(5.dp))
-                Text("Ready when you type.", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                Text(
+                    "WRITING ASSISTANT",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White.copy(alpha = 0.75f),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.4.sp
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (enabled) "Ready when you type." else "Your assistant is paused.",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
             }
             Switch(
                 checked = enabled,
                 onCheckedChange = onToggle,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = Color(0xFF60D6B6),
+                    checkedTrackColor = Color(0xFF44BDA7),
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = Color.White.copy(alpha = 0.28f),
                     uncheckedBorderColor = Color.White.copy(alpha = 0.6f)
@@ -430,14 +452,23 @@ private fun ServiceHeroCard(
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
                 modifier = Modifier
-                    .background(Color.White.copy(alpha = 0.18f), MaterialTheme.shapes.small)
+                    .background(Color.White.copy(alpha = 0.17f), MaterialTheme.shapes.small)
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             )
-            Text("$provider  ·  ${model.ifBlank { "No model selected" }}", color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            Text(
+                "$provider  ·  ${model.ifBlank { "No model selected" }}",
+                color = Color.White.copy(alpha = 0.9f),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1
+            )
         }
         if (!hasPermission) {
             Spacer(Modifier.height(12.dp))
-            Text("Accessibility permission is needed to process text.", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
+            Text(
+                "Accessibility permission is needed to process text.",
+                color = Color.White.copy(alpha = 0.82f),
+                style = MaterialTheme.typography.labelSmall
+            )
         }
     }
 }
@@ -453,16 +484,24 @@ private fun DashboardQuickAction(
     Card(
         modifier = modifier.clickable(onClick = onClick),
         shape = MaterialTheme.shapes.large,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 15.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(11.dp)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Column(Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+            }
+            Column {
                 Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                 Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
@@ -473,19 +512,28 @@ private fun DashboardQuickAction(
 @Composable
 private fun HomeCommandExample(trigger: String, label: String) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             trigger,
             modifier = Modifier
                 .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.small)
-                .padding(horizontal = 9.dp, vertical = 5.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.labelLarge
         )
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(12.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+@Composable
+private fun TextButtonRow(label: String, onClick: () -> Unit) {
+    androidx.compose.material3.TextButton(onClick = onClick) {
+        Text(label)
+        Spacer(Modifier.width(6.dp))
+        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
     }
 }

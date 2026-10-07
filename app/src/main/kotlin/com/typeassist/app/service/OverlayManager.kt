@@ -333,12 +333,13 @@ class OverlayManager(private val context: Context) {
         val container = FrameLayout(context).apply {
             setPadding(sdp(6), sdp(6), sdp(6), sdp(6))
         }
-        val ring = NeonRingView(context, indicatorColor, sdpF(3.5f)).apply {
+        val ring = NeonRingView(context, LoadingIndicatorStyle.NEON_PALETTE.toIntArray(), sdpF(3.5f)).apply {
             layoutParams = FrameLayout.LayoutParams(sdp(52), sdp(52), Gravity.CENTER)
         }
         val core = View(context).apply {
             layoutParams = FrameLayout.LayoutParams(sdp(8), sdp(8), Gravity.CENTER)
-            background = circleDrawable(LoadingIndicatorStyle.contrastColor(indicatorColor))
+            // A neon tube needs a white-hot centre, not a dark contrast dot.
+            background = circleDrawable(Color.WHITE)
             elevation = dpF(6f)
         }
         container.addView(ring)
@@ -717,9 +718,12 @@ class OverlayManager(private val context: Context) {
  */
 private class NeonRingView(
     context: Context,
-    private val color: Int,
+    palette: IntArray,
     private val strokeWidth: Float
 ) : View(context) {
+
+    private val neonPalette = palette.copyOf()
+    private val baseNeonColor = neonPalette.first()
 
     /** 0f..1f - how strongly the tube is glowing right now. */
     var glowStrength: Float = 1f
@@ -736,14 +740,13 @@ private class NeonRingView(
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         this.strokeWidth = this@NeonRingView.strokeWidth
-        this.color = LoadingIndicatorStyle.withAlpha(this@NeonRingView.color, 44)
+        color = LoadingIndicatorStyle.withAlpha(baseNeonColor, 36)
     }
 
     private val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         this.strokeWidth = this@NeonRingView.strokeWidth * 3f
-        this.color = LoadingIndicatorStyle.withAlpha(this@NeonRingView.color, 70)
     }
 
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -760,7 +763,7 @@ private class NeonRingView(
 
     private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        this.color = LoadingIndicatorStyle.contrastColor(this@NeonRingView.color)
+        color = Color.WHITE
     }
 
     /** Length of the lit arc; the remaining 60 degrees are the faded tail. */
@@ -776,16 +779,31 @@ private class NeonRingView(
         // Leave room around the ring so the halo and the glow are not clipped by the view bounds.
         val inset = strokeWidth * 3.5f + 1f
         arcRect.set(inset, inset, w - inset, h - inset)
-        arcPaint.shader = SweepGradient(
+
+        val spectrumStops = floatArrayOf(0f, 0.08f, 0.25f, 0.45f, 0.65f, 0.85f, 1f)
+        val spectrum = intArrayOf(
+            LoadingIndicatorStyle.withAlpha(neonPalette[0], 0),
+            LoadingIndicatorStyle.withAlpha(neonPalette[0], 220),
+            neonPalette[1],
+            neonPalette[2],
+            neonPalette[3],
+            neonPalette[4],
+            neonPalette[0]
+        )
+        arcPaint.shader = SweepGradient(w / 2f, h / 2f, spectrum, spectrumStops)
+        haloPaint.shader = SweepGradient(
             w / 2f,
             h / 2f,
             intArrayOf(
-                LoadingIndicatorStyle.withAlpha(color, 0),
-                LoadingIndicatorStyle.withAlpha(color, 90),
-                color,
-                color
+                LoadingIndicatorStyle.withAlpha(neonPalette[0], 0),
+                LoadingIndicatorStyle.withAlpha(neonPalette[0], 90),
+                LoadingIndicatorStyle.withAlpha(neonPalette[1], 70),
+                LoadingIndicatorStyle.withAlpha(neonPalette[2], 70),
+                LoadingIndicatorStyle.withAlpha(neonPalette[3], 70),
+                LoadingIndicatorStyle.withAlpha(neonPalette[4], 70),
+                LoadingIndicatorStyle.withAlpha(neonPalette[0], 70)
             ),
-            floatArrayOf(0f, 0.3f, 0.85f, 1f)
+            spectrumStops
         )
         corePaint.shader = SweepGradient(
             w / 2f,
@@ -803,20 +821,20 @@ private class NeonRingView(
         if (arcRect.isEmpty) return
         val glow = glowStrength
 
-        haloPaint.alpha = (80f * glow).toInt().coerceIn(0, 255)
-        haloPaint.setShadowLayer(strokeWidth * 1.5f * glow, 0f, 0f, color)
+        haloPaint.alpha = (110f * glow).toInt().coerceIn(0, 255)
+        haloPaint.setShadowLayer(strokeWidth * 1.5f * glow, 0f, 0f, baseNeonColor)
         canvas.drawArc(arcRect, 0f, sweepAngle, false, haloPaint)
 
         canvas.drawArc(arcRect, 0f, 360f, false, trackPaint)
 
-        arcPaint.setShadowLayer(strokeWidth * 2f * glow, 0f, 0f, color)
+        arcPaint.setShadowLayer(strokeWidth * 2.2f * glow, 0f, 0f, baseNeonColor)
         canvas.drawArc(arcRect, 0f, sweepAngle, false, arcPaint)
 
-        // White-hot core running through the middle of the tube.
-        corePaint.setShadowLayer(strokeWidth * glow, 0f, 0f, color)
+        // White-hot core running through the multicolour tube.
+        corePaint.setShadowLayer(strokeWidth * glow, 0f, 0f, baseNeonColor)
         canvas.drawArc(arcRect, 0f, sweepAngle, false, corePaint)
 
-        headPaint.setShadowLayer(strokeWidth * 2.5f * glow, 0f, 0f, color)
+        headPaint.setShadowLayer(strokeWidth * 2.5f * glow, 0f, 0f, Color.WHITE)
         canvas.drawCircle(headX, headY, strokeWidth * 0.75f, headPaint)
     }
 }

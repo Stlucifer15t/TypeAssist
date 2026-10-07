@@ -20,6 +20,41 @@ import com.typeassist.app.data.model.GitHubRelease
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
 @Composable
+fun VersionAnnouncementDialog(versionName: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.RocketLaunch,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(44.dp)
+            )
+        },
+        title = { Text("Prompt AI $versionName is here", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Here’s what’s new:", fontWeight = FontWeight.SemiBold)
+                Text("• Refreshed Material 3 styling with System, Light, Dark and true-black AMOLED themes.")
+                Text("• A brighter animated neon-spectrum indicator with electric cyan, laser blue, violet, magenta and hot pink.")
+                Text("• This release announcement appears once for this installed version.")
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Get started")
+            }
+        }
+    )
+}
+
+@Composable
 fun UpdateDialog(release: GitHubRelease, onDismiss: () -> Unit) {
     val context = LocalContext.current
 
@@ -60,6 +95,7 @@ fun UpdateDialog(release: GitHubRelease, onDismiss: () -> Unit) {
         confirmButton = {
             Button(
                 onClick = {
+                    onDismiss()
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl))
                     context.startActivity(intent)
                 },

@@ -1,0 +1,6 @@
+Version 4.4.5
+
+• Added Material 3 appearance options: System, Light, Dark, and AMOLED black.
+• Reworked the neon loading ring as a locked, animated spectrum of vivid electric colours.
+• Added a one-time release announcement on the first launch of this version.
+• Improved update prompts so a dismissed release is not shown again.

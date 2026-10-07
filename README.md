@@ -32,12 +32,13 @@
   - `Bars` - Equalizer bars
   - `Typing` - iMessage-style typing bubble
   - `Pill` - Rounded pill with "AI thinking..."
-  - `Neon ring` - Glowing neon tube that sweeps the ring: faded trail, soft halo, white-hot core, bright leading head and a breathing glow. Keeps its own authentic electric-cyan colour (picker locked) so it always stays true to neon
+  - `Neon ring` - Locked, animated neon spectrum (electric cyan, laser blue, ultraviolet, magenta and hot pink) with a rotating light trail, breathing halo and white-hot core
   - Live preview in settings + fully animated overlay via `OverlayManager`
-- **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style except the neon ring, which keeps its authentic cyan.
+- **🎨 Indicator Colour** — Settings → General → *Indicator colour*: quick-pick swatches, a hex field for any colour at all (`#RRGGBB`), and a hue/saturation/brightness mixer. Applies to every style except the fixed neon spectrum.
+- **🌑 Material 3 Themes** — Choose System, Light, Dark, or AMOLED black in Settings → General → Appearance. The installed version shows its release announcement on first launch, once per version.
 - **📏 Indicator Size** — Settings → General → *Indicator size*: 50%–200% slider that scales the whole overlay indicator (100% is the original size).
 - Both settings live in `AppConfig` (`loadingIndicatorColor`, `loadingIndicatorSizePercent`) and are backward compatible: configs saved before them fall back to white / 100%.
-- **🔧 GitHub Workflows Simplified** — All workflows (`build.yml`, `release.yml`, `pre-release.yml`, `preview.yml`) now only **build Full APK and upload unsigned artifact** (`app-full-release-unsigned.apk`). No `SIGNING_KEY_*` secrets required — download artifact and sign with MT Manager.
+- **🔏 Signed Android releases** — Stable releases, preview tags, and manual preview builds produce a ready-to-install APK signed with the repository’s protected Android release keystore. Stable tags create/update a GitHub Release with the APK attached, and in-app update checks point to this fork. Pull-request/branch CI artifacts remain unsigned and never receive signing secrets.
 - **🧹 UI Cleanup** — Removed `Support development` (Binance/USDT) section, `Twitter`, and `Telegram community` links from Home screen. `Made with care` now only shows **Source code on GitHub → https://github.com/Stlucifer15t/TypeAssist**
 - **⚙️ Config** — Added `loadingIndicatorStyle` to `AppConfig` with backward-compatible fallback.
 
@@ -100,25 +101,58 @@
 
 ## 🧪 Preview Builds
 
-This fork's workflows build **unsigned** Full APK as artifact:
-- **Pull Requests** → `PromptAI-Full-unsigned`
-- **Tags `v*`** → `PromptAI-vX.Y.Z-Full-unsigned`
-- **Preview tags `v*-preview.*`** → same pattern
-- **Manual dispatch** → `PromptAI-preview-Full-unsigned`
+Build and distribution workflows are split by trust level:
+- **Pull requests and branch CI** → unsigned `PromptAI-Full-unsigned` artifact (for CI/testing only).
+- **Stable tags `v*`** → signed APK attached to the GitHub Release as `PromptAI-vX.Y.Z.apk`.
+- **Preview tags `v*-preview.*`** → signed preview APK artifact.
+- **Manual preview build** → signed `PromptAI-preview.apk` artifact.
 
-Download from **Actions → workflow run → Artifacts**, then sign with **MT Manager** or `apksigner`.
+Signed workflows require the maintainer keystore secrets described below. Users can install the signed release APK directly—no MT Manager signing step.
 
 [![Download Artifacts](https://img.shields.io/badge/Download-Artifacts-blue?style=for-the-badge)](https://github.com/Stlucifer15t/TypeAssist/actions)
+
+### Android release signing (maintainers)
+
+The same signing key must be used for every release so Android accepts updates over an existing installation. **Never commit the keystore or its passwords.** Create a release keystore once on a trusted machine and keep a secure offline backup:
+
+```bash
+keytool -genkeypair -v -keystore prompt-ai-release.jks -storetype JKS -alias promptai -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Add these as **repository Actions secrets** in GitHub → **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Base64 of `prompt-ai-release.jks` (Linux: `base64 -w 0 prompt-ai-release.jks`; macOS: `base64 < prompt-ai-release.jks \| tr -d '\n'`) |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password chosen when creating it |
+| `ANDROID_KEY_ALIAS` | `promptai` (or the alias you chose) |
+| `ANDROID_KEY_PASSWORD` | Password for that key alias |
+
+For local signing, the ignored root-level `keystore.properties` file uses these keys (store real values only on your own machine):
+
+```properties
+storeFile=/absolute/path/to/prompt-ai-release.jks
+storeType=JKS
+storePassword=your-keystore-password
+keyAlias=promptai
+keyPassword=your-key-password
+```
+
+The tag and manual-preview workflows validate these secrets, decode the keystore only into the runner’s temporary directory, build the Full APK, and verify its signature. Local maintainers can alternatively use the ignored `keystore.properties` file supported by Gradle. Keep the application ID unchanged and increment `versionCode` for every published update. **If this private key is lost or replaced, Android will not accept future APKs as updates.**
+
+**Moving existing users to the new key:** an APK previously signed with a different MT Manager key may not accept the first centrally signed update. Those users may need to export a backup in-app, uninstall the old copy, and install the new signed APK once. After that, subsequent releases signed with this same keystore install as normal updates. Back up first; uninstalling clears the app’s private data.
 
 ---
 
 ## 📥 Installation & Setup
 
-1.  **Download:** Get the latest unsigned APK from Actions artifacts or Releases.
-2.  **Sign:** Sign with MT Manager if unsigned.
+1.  **Download:** Get the signed APK from the latest GitHub Release.
+2.  **Install/update:** Open it with Android’s package installer. Future releases signed with the same keystore install over the existing app.
 3.  **Permissions:** Enable the **Prompt AI Accessibility Service** in Android Settings.
 4.  **API Key:** Open the app → **Settings** → add your API keys (Gemini, Cloudflare, Custom, Local LLM).
 5.  **Start Typing:** Open any app and try a trigger!
+
+> Pull-request/branch CI artifacts are unsigned and are not the normal install/update path.
 
 ---
 

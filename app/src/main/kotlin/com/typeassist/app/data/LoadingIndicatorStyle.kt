@@ -14,15 +14,18 @@ object LoadingIndicatorStyle {
     /** Opaque white - the colour the indicator has always used. */
     const val DEFAULT_COLOR: Int = -1 // 0xFFFFFFFF
 
-    /**
-     * The neon ring keeps its own authentic electric-cyan glow and ignores the colour picker,
-     * so it always stays true to neon.
-     */
-    const val NEON_COLOR: Int = 0xFF00E5FF.toInt()
+    /** Built-in, high-saturation colours used by the animated neon spectrum (and locked in Settings). */
+    val NEON_PALETTE: List<Int> = listOf(
+        0xFF00F5FF.toInt(), // Electric cyan
+        0xFF0066FF.toInt(), // Laser blue
+        0xFF7B2CFF.toInt(), // Ultraviolet
+        0xFFFF00D4.toInt(), // Neon magenta
+        0xFFFF2A6D.toInt()  // Hot pink
+    )
 
-    /** The colour a style actually renders with: neon is fixed, everything else follows the picker. */
+    /** Neon uses its own vivid palette; other styles use the user's selected colour. */
     fun effectiveColor(style: String, picked: Int): Int =
-        if (style == "neon") NEON_COLOR else sanitizeColor(picked)
+        if (style == "neon") NEON_PALETTE.first() else sanitizeColor(picked)
 
     const val DEFAULT_SIZE_PERCENT: Int = 100
     const val MIN_SIZE_PERCENT: Int = 50

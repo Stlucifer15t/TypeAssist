@@ -1,5 +1,6 @@
 package com.typeassist.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,16 +20,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.InlineCommand
 import com.typeassist.app.data.Trigger
+import com.typeassist.app.ui.components.EmptyState
 import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () -> Unit, onNavigateLibrary: () -> Unit) {
-    var selectedTab by remember { mutableStateOf(0) }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     var showEditDialog by remember { mutableStateOf(false) }
     var showTip by rememberSaveable { mutableStateOf(true) }
     var tPattern by remember { mutableStateOf("") }
@@ -60,12 +64,12 @@ fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.primary
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
                 ) 
             ) 
         },
-        floatingActionButtonPosition = FabPosition.Center,
+        floatingActionButtonPosition = FabPosition.End,
         floatingActionButton = { 
             FloatingActionButton(
                 onClick = { 
@@ -96,6 +100,23 @@ fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                         eyebrow = "PERSONALIZE",
                         title = "Your commands",
                         description = "Shape your own AI shortcuts and inline actions."
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search commands") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear search")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.large
                     )
                     Spacer(Modifier.height(18.dp))
                 }
@@ -134,35 +155,63 @@ fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                     }
                 }
                 if (selectedTab == 0) {
-                    items(triggers) { t ->
-                        CommandItem(
-                            pattern = t.pattern, 
-                            prompt = t.prompt, 
-                            onEdit = { 
-                                tPattern = t.pattern
-                                tPrompt = t.prompt
-                                originalPattern = t.pattern
-                                showEditDialog = true
-                            },
-                            onDelete = { triggerToDelete = t }
-                        )
+                    val visibleTriggers = triggers.filter {
+                        searchQuery.isBlank() || it.pattern.contains(searchQuery.trim(), ignoreCase = true) ||
+                            it.prompt.contains(searchQuery.trim(), ignoreCase = true)
+                    }
+                    if (visibleTriggers.isEmpty()) {
+                        item {
+                            EmptyState(
+                                icon = Icons.Default.AutoAwesome,
+                                title = if (searchQuery.isBlank()) "No commands yet" else "No matching commands",
+                                description = if (searchQuery.isBlank()) "Create a shortcut to bring your favorite writing tools into any text field." else "Try a different search term."
+                            )
+                        }
+                    } else {
+                        items(visibleTriggers) { t ->
+                            CommandItem(
+                                pattern = t.pattern,
+                                prompt = t.prompt,
+                                onEdit = {
+                                    tPattern = t.pattern
+                                    tPrompt = t.prompt
+                                    originalPattern = t.pattern
+                                    showEditDialog = true
+                                },
+                                onDelete = { triggerToDelete = t }
+                            )
+                        }
                     }
                 } else {
-                    items(inlineCommands) { t ->
-                        CommandItem(
-                            pattern = t.pattern, 
-                            prompt = t.prompt, 
-                            onEdit = { 
-                                tPattern = t.pattern
-                                tPrompt = t.prompt
-                                originalPattern = t.pattern
-                                showEditDialog = true
-                            },
-                            onDelete = { inlineToDelete = t }
-                        )
+                    val visibleCommands = inlineCommands.filter {
+                        searchQuery.isBlank() || it.pattern.contains(searchQuery.trim(), ignoreCase = true) ||
+                            it.prompt.contains(searchQuery.trim(), ignoreCase = true)
+                    }
+                    if (visibleCommands.isEmpty()) {
+                        item {
+                            EmptyState(
+                                icon = Icons.Default.AutoAwesome,
+                                title = if (searchQuery.isBlank()) "No inline commands yet" else "No matching commands",
+                                description = if (searchQuery.isBlank()) "Inline commands let you rewrite selected parts of a sentence." else "Try a different search term."
+                            )
+                        }
+                    } else {
+                        items(visibleCommands) { t ->
+                            CommandItem(
+                                pattern = t.pattern,
+                                prompt = t.prompt,
+                                onEdit = {
+                                    tPattern = t.pattern
+                                    tPrompt = t.prompt
+                                    originalPattern = t.pattern
+                                    showEditDialog = true
+                                },
+                                onDelete = { inlineToDelete = t }
+                            )
+                        }
                     }
                 }
-                item { Spacer(modifier = Modifier.height(80.dp)) }
+                item { Spacer(modifier = Modifier.height(28.dp)) }
             }
         }
 
@@ -250,8 +299,10 @@ fun CommandItem(pattern: String, prompt: String, onEdit: () -> Unit, onDelete: (
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
-            .clickable { onEdit() }, 
-        elevation = CardDefaults.cardElevation(2.dp),
+            .clickable { onEdit() },
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Row(

@@ -74,22 +74,22 @@ class LoadingIndicatorStyleTest {
     }
 
     @Test
-    fun theNeonRingKeepsItsAuthenticColour() {
-        // Neon ignores the picked colour entirely.
+    fun neonUsesItsLockedVividPaletteAndOtherStylesUseThePicker() {
+        val picked = 0xFFFB7185.toInt()
         assertEquals(
-            LoadingIndicatorStyle.NEON_COLOR,
-            LoadingIndicatorStyle.effectiveColor("neon", 0xFFFB7185.toInt())
+            LoadingIndicatorStyle.NEON_PALETTE.first(),
+            LoadingIndicatorStyle.effectiveColor("neon", picked)
         )
-        // Every other style follows the picker.
-        assertEquals(
-            0xFFFB7185.toInt(),
-            LoadingIndicatorStyle.effectiveColor("dots", 0xFFFB7185.toInt())
-        )
-        // Legacy 0 still falls back to the default for non-neon styles.
+        assertEquals(picked, LoadingIndicatorStyle.effectiveColor("dots", picked))
         assertEquals(
             LoadingIndicatorStyle.DEFAULT_COLOR,
             LoadingIndicatorStyle.effectiveColor("classic", 0)
         )
+        assertTrue(LoadingIndicatorStyle.NEON_PALETTE.size >= 4)
+        assertTrue(LoadingIndicatorStyle.NEON_PALETTE.distinct().size >= 4)
+        LoadingIndicatorStyle.NEON_PALETTE.forEach { neon ->
+            assertEquals(255, LoadingIndicatorStyle.alphaOf(neon))
+        }
     }
 
     @Test

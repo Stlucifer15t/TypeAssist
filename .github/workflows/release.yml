@@ -5,14 +5,13 @@ on:
     tags:
       - 'v*'
 
-# Needed so the build job can attach the APK to the GitHub release.
 permissions:
   contents: write
 
 jobs:
   release:
     if: ${{ !contains(github.ref_name, '-preview.') }}
-    name: Build Full APK
+    name: Build and publish signed Full APK
     runs-on: ubuntu-latest
 
     steps:
@@ -35,20 +34,50 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build Full release APK
+      - name: Prepare Android release signing
+        id: signing
+        uses: ./.github/actions/android-signing
+        with:
+          keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build signed Full release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleFullRelease --stacktrace
 
-      - name: Upload Full APK artifact
+      - name: Verify signed APK
+        run: |
+          apk="app/build/outputs/apk/full/release/app-full-release.apk"
+          test -f "$apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$apksigner"
+          "$apksigner" verify --verbose "$apk"
+
+      - name: Stage release APK
+        run: cp app/build/outputs/apk/full/release/app-full-release.apk "PromptAI-${GITHUB_REF_NAME}.apk"
+
+      - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PromptAI-${{ github.ref_name }}-Full-unsigned
-          path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
+          name: PromptAI-${{ github.ref_name }}-Full-signed
+          path: PromptAI-${{ github.ref_name }}.apk
           if-no-files-found: error
 
-      - name: Attach APK to the GitHub release
+      - name: Create or update the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "Prompt AI ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
           gh release upload "${GITHUB_REF_NAME}" \
-            app/build/outputs/apk/full/release/app-full-release-unsigned.apk \
-            --clobber || echo "::warning::Release ${GITHUB_REF_NAME} not found yet; APK stays available as an Actions artifact."
+            "PromptAI-${GITHUB_REF_NAME}.apk" \
+            --clobber
