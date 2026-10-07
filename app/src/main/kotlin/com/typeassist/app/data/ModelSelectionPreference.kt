@@ -77,6 +77,33 @@ object ModelSelectionPreferences {
             .removeSuffix("/")
     }
 
+    /**
+     * Collapses duplicate entries for the same provider + endpoint + model ID (case-insensitive),
+     * keeping one row per model. Favourites win, and the most recent selection time is kept.
+     * Also drops blank model IDs and normalises endpoint/model strings.
+     */
+    fun sanitize(preferences: List<ModelSelectionPreference>?): MutableList<ModelSelectionPreference> {
+        val byModel = LinkedHashMap<String, ModelSelectionPreference>()
+        preferences.orEmpty().forEach { entry ->
+            val provider = entry.provider.trim()
+            val model = entry.modelId.trim()
+            if (provider.isEmpty() || model.isEmpty()) return@forEach
+            val endpoint = endpointKey(provider, entry.endpoint)
+            val key = provider + "\u0000" + endpoint + "\u0000" + model.lowercase()
+            val existing = byModel[key]
+            byModel[key] = if (existing == null) {
+                entry.copy(provider = provider, endpoint = endpoint, modelId = model)
+            } else {
+                existing.copy(
+                    modelId = model,
+                    isFavorite = existing.isFavorite || entry.isFavorite,
+                    lastSelectedAt = maxOf(existing.lastSelectedAt, entry.lastSelectedAt)
+                )
+            }
+        }
+        return trim(byModel.values.toMutableList())
+    }
+
     private fun trim(entries: MutableList<ModelSelectionPreference>): MutableList<ModelSelectionPreference> {
         if (entries.size <= MAX_STORED_MODELS) return entries
         val retained = entries

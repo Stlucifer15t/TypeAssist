@@ -107,6 +107,7 @@ import com.typeassist.app.data.CustomApiConfig
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.SavedGeminiConfig
+import com.typeassist.app.data.identityKey
 import com.typeassist.app.data.repository.UpdateRepository
 import com.typeassist.app.ui.AppThemeMode
 import com.typeassist.app.ui.components.PageHeading
@@ -1036,21 +1037,30 @@ private fun AiProviderSettingsTabModern(config: AppConfig, client: OkHttpClient,
                     model = cfModel.trim()
                 )
 
+                // One profile per identity: saving the same endpoint + API key again overlays the
+                // existing row (updating its model) instead of adding another duplicate.
                 val savedCustom = config.savedCustomConfigs.toMutableList()
-                if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank() && newCustomConfig !in savedCustom) {
-                    savedCustom.add(newCustomConfig)
+                if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank()) {
+                    val index = savedCustom.indexOfFirst { it.identityKey() == newCustomConfig.identityKey() }
+                    if (index >= 0) savedCustom[index] = newCustomConfig else savedCustom.add(newCustomConfig)
                 }
                 val savedGemini = config.savedGeminiConfigs.toMutableList()
-                if (selectedProvider == "gemini" && geminiKey.isNotBlank() && newGeminiConfig !in savedGemini) {
-                    savedGemini.add(newGeminiConfig)
+                if (selectedProvider == "gemini" && geminiKey.isNotBlank()) {
+                    val index = savedGemini.indexOfFirst { it.identityKey() == newGeminiConfig.identityKey() }
+                    if (index >= 0) savedGemini[index] = newGeminiConfig else savedGemini.add(newGeminiConfig)
                 }
                 val savedCloudflare = config.savedCloudflareConfigs.toMutableList()
-                if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank() && newCloudflareConfig !in savedCloudflare) {
-                    savedCloudflare.add(newCloudflareConfig)
+                if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank()) {
+                    val index = savedCloudflare.indexOfFirst { it.identityKey() == newCloudflareConfig.identityKey() }
+                    if (index >= 0) savedCloudflare[index] = newCloudflareConfig else savedCloudflare.add(newCloudflareConfig)
                 }
-                val savedLocal = config.savedLocalModels.toMutableList()
-                if (selectedProvider == "local" && config.localLlmConfig.modelPath.isNotBlank() && config.localLlmConfig.modelPath !in savedLocal) {
-                    savedLocal.add(config.localLlmConfig.modelPath)
+                val savedLocal = config.savedLocalModels
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toMutableList()
+                if (selectedProvider == "local" && config.localLlmConfig.modelPath.isNotBlank()) {
+                    val path = config.localLlmConfig.modelPath.trim()
+                    if (path !in savedLocal) savedLocal.add(path)
                 }
 
                 var updatedPreferences = config.modelPreferences ?: mutableListOf()

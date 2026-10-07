@@ -34,7 +34,9 @@ import androidx.compose.ui.unit.dp
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.LoadingIndicatorStyle
+import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.createDefaultConfig
+import com.typeassist.app.data.mergeDuplicateProfiles
 import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.ui.screens.*
 import okhttp3.OkHttpClient
@@ -44,6 +46,18 @@ private data class AppDestination(
     val label: String,
     val icon: ImageVector
 )
+
+/**
+ * Drops duplicate saved profiles (one row per endpoint + key) and duplicate model history entries.
+ * Returns the same instance when nothing had to change, so callers can detect it cheaply.
+ */
+private fun cleanConfig(config: AppConfig): AppConfig {
+    val sanitizedPreferences = ModelSelectionPreferences.sanitize(config.modelPreferences)
+    val withPreferences =
+        if (sanitizedPreferences == config.modelPreferences) config
+        else config.copy(modelPreferences = sanitizedPreferences)
+    return mergeDuplicateProfiles(withPreferences)
+}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -101,14 +115,21 @@ fun TypeAssistApp(
                         snippet.content = ""
                     }
                 }
-                loadedConfig
+                // Migration: drop duplicate saved profiles / model history from older configs,
+                // and persist the cleaned config so the duplicates stay gone.
+                val cleanedConfig = cleanConfig(loadedConfig)
+                if (cleanedConfig !== loadedConfig) {
+                    prefs.edit().putString("config_json", gson.toJson(cleanedConfig)).apply()
+                }
+                cleanedConfig
             } else createDefaultConfig()
         } catch (e: Exception) { createDefaultConfig() })
     }
 
     fun saveConfig(newConfig: AppConfig) {
-        config = newConfig
-        prefs.edit().putString("config_json", gson.toJson(newConfig)).apply()
+        val cleaned = cleanConfig(newConfig)
+        config = cleaned
+        prefs.edit().putString("config_json", gson.toJson(cleaned)).apply()
     }
 
     // Custom navigate function to track previous screen
