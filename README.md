@@ -111,49 +111,6 @@ Signed workflows require the maintainer keystore secrets described below. Users 
 
 [![Download Artifacts](https://img.shields.io/badge/Download-Artifacts-blue?style=for-the-badge)](https://github.com/Stlucifer15t/TypeAssist/actions)
 
-### Android release signing (maintainers)
-
-The same signing key must be used for every release so Android accepts updates over an existing installation. **Never commit the keystore or its passwords.** Create a release keystore once on a trusted machine and keep a secure offline backup:
-
-```bash
-keytool -genkeypair -v -keystore prompt-ai-release.jks -storetype JKS -alias promptai -keyalg RSA -keysize 2048 -validity 10000
-```
-
-Add these as **repository Actions secrets** in GitHub → **Settings → Secrets and variables → Actions**:
-
-| Secret | Value |
-| --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | Base64 of `prompt-ai-release.jks` (Linux: `base64 -w 0 prompt-ai-release.jks`; macOS: `base64 < prompt-ai-release.jks \| tr -d '\n'`) |
-| `ANDROID_KEYSTORE_PASSWORD` | Keystore password chosen when creating it |
-| `ANDROID_KEY_ALIAS` | `promptai` (or the alias you chose) |
-| `ANDROID_KEY_PASSWORD` | Password for that key alias |
-
-For local signing, the ignored root-level `keystore.properties` file uses these keys (store real values only on your own machine):
-
-```properties
-storeFile=/absolute/path/to/prompt-ai-release.jks
-storeType=JKS
-storePassword=your-keystore-password
-keyAlias=promptai
-keyPassword=your-key-password
-```
-
-The tag and manual-preview workflows validate these secrets, decode the keystore only into the runner’s temporary directory, build the Full APK, and verify its signature. Local maintainers can alternatively use the ignored `keystore.properties` file supported by Gradle. Keep the application ID unchanged and increment `versionCode` for every published update. **If this private key is lost or replaced, Android will not accept future APKs as updates.**
-
-**Moving existing users to the new key:** an APK previously signed with a different MT Manager key may not accept the first centrally signed update. Those users may need to export a backup in-app, uninstall the old copy, and install the new signed APK once. After that, subsequent releases signed with this same keystore install as normal updates. Back up first; uninstalling clears the app’s private data.
-
----
-
-## 📥 Installation & Setup
-
-1.  **Download:** Get the signed APK from the latest GitHub Release.
-2.  **Install/update:** Open it with Android’s package installer. Future releases signed with the same keystore install over the existing app.
-3.  **Permissions:** Enable the **Prompt AI Accessibility Service** in Android Settings.
-4.  **API Key:** Open the app → **Settings** → add your API keys (Gemini, Cloudflare, Custom, Local LLM).
-5.  **Start Typing:** Open any app and try a trigger!
-
-> Pull-request/branch CI artifacts are unsigned and are not the normal install/update path.
-
 ---
 
 ## 🛠 Tech Stack
