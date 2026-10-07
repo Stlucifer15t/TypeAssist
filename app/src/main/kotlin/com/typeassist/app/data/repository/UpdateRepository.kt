@@ -9,6 +9,11 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 class UpdateRepository(context: Context) {
 
+    companion object {
+        const val RELEASE_OWNER = "Stlucifer15t"
+        const val RELEASE_REPOSITORY = "TypeAssist"
+    }
+
     private val apiService: GitHubApiService
 
     init {
@@ -20,7 +25,10 @@ class UpdateRepository(context: Context) {
         apiService = retrofit.create(GitHubApiService::class.java)
     }
 
-    suspend fun checkForUpdate(owner: String, repo: String): Result<GitHubRelease?> {
+    suspend fun checkForUpdate(
+        owner: String = RELEASE_OWNER,
+        repo: String = RELEASE_REPOSITORY
+    ): Result<GitHubRelease?> {
         return try {
             val release = apiService.getLatestRelease(owner, repo)
             val currentVersion = BuildConfig.VERSION_NAME

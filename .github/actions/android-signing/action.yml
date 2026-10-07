@@ -1,0 +1,56 @@
+name: Prepare Android release signing
+
+description: Validate signing secrets and decode the Android upload keystore to the runner's temporary directory.
+
+inputs:
+  keystore_base64:
+    description: Base64-encoded JKS release keystore.
+    required: false
+  keystore_password:
+    description: Keystore store password.
+    required: false
+  key_alias:
+    description: Signing key alias.
+    required: false
+  key_password:
+    description: Signing key password.
+    required: false
+
+outputs:
+  keystore_path:
+    description: Absolute path to the decoded keystore.
+    value: ${{ steps.decode.outputs.keystore_path }}
+
+runs:
+  using: composite
+  steps:
+    - id: decode
+      name: Validate signing credentials and decode keystore
+      shell: bash
+      env:
+        ANDROID_KEYSTORE_BASE64: ${{ inputs.keystore_base64 }}
+        ANDROID_KEYSTORE_PASSWORD: ${{ inputs.keystore_password }}
+        ANDROID_KEY_ALIAS: ${{ inputs.key_alias }}
+        ANDROID_KEY_PASSWORD: ${{ inputs.key_password }}
+      run: |
+        set -euo pipefail
+
+        missing=()
+        [[ -n "$ANDROID_KEYSTORE_BASE64" ]] || missing+=(ANDROID_KEYSTORE_BASE64)
+        [[ -n "$ANDROID_KEYSTORE_PASSWORD" ]] || missing+=(ANDROID_KEYSTORE_PASSWORD)
+        [[ -n "$ANDROID_KEY_ALIAS" ]] || missing+=(ANDROID_KEY_ALIAS)
+        [[ -n "$ANDROID_KEY_PASSWORD" ]] || missing+=(ANDROID_KEY_PASSWORD)
+        if (( ${#missing[@]} > 0 )); then
+          printf '::error::Missing required GitHub Actions secret(s): %s\n' "${missing[*]}"
+          echo "See README.md → Android release signing to configure them."
+          exit 1
+        fi
+
+        keystore_path="$RUNNER_TEMP/prompt-ai-release.keystore"
+        printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+        if [[ ! -s "$keystore_path" ]]; then
+          echo "::error::The decoded Android keystore is empty. Check ANDROID_KEYSTORE_BASE64."
+          exit 1
+        fi
+        chmod 600 "$keystore_path"
+        echo "keystore_path=$keystore_path" >> "$GITHUB_OUTPUT"

@@ -1,6 +1,7 @@
 package com.typeassist.app.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.Snippet
+import com.typeassist.app.ui.components.EmptyState
 import com.typeassist.app.ui.components.PageHeading
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,10 +73,10 @@ fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.primary, navigationIconContentColor = MaterialTheme.colorScheme.primary)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface, navigationIconContentColor = MaterialTheme.colorScheme.onSurface)
             ) 
         },
-        floatingActionButtonPosition = FabPosition.Center,
+        floatingActionButtonPosition = FabPosition.End,
         floatingActionButton = { 
             FloatingActionButton(
                 onClick = { 
@@ -130,38 +132,50 @@ fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () ->
             )
 
             LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                items(filteredSnippets) { s ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                            .clickable { 
-                                tTrigger = s.trigger
-                                tContents.clear()
-                                tContents.addAll(s.contents)
-                                if (tContents.isEmpty()) tContents.add("")
-                                originalTrigger = s.trigger
-                                showEditDialog = true 
-                            }, 
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp), 
-                            verticalAlignment = Alignment.CenterVertically
+                if (filteredSnippets.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.Search,
+                            title = if (searchQuery.isBlank()) "No snippets yet" else "No matching snippets",
+                            description = if (searchQuery.isBlank()) "Save reusable text and expand it with a short trigger." else "Try another search or clear the current filter."
+                        )
+                    }
+                } else {
+                    items(filteredSnippets) { s ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                                .clickable {
+                                    tTrigger = s.trigger
+                                    tContents.clear()
+                                    tContents.addAll(s.contents)
+                                    if (tContents.isEmpty()) tContents.add("")
+                                    originalTrigger = s.trigger
+                                    showEditDialog = true
+                                },
+                            shape = MaterialTheme.shapes.large,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) { 
-                                Text(s.trigger, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 16.sp)
-                                val subText = if (s.contents.size > 1) "${s.contents.size} variations" else if (s.contents.isNotEmpty()) s.contents[0] else ""
-                                Text(subText, maxLines = 1, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) 
-                            }
-                            IconButton(onClick = { snippetToDelete = s }) { 
-                                Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error) 
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(s.trigger, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 16.sp)
+                                    val subText = if (s.contents.size > 1) "${s.contents.size} variations" else if (s.contents.isNotEmpty()) s.contents[0] else ""
+                                    Text(subText, maxLines = 1, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                IconButton(onClick = { snippetToDelete = s }) {
+                                    Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
                     }
                 }
-                item { Spacer(modifier = Modifier.height(80.dp)) }
+                item { Spacer(modifier = Modifier.height(24.dp)) }
             }
         }
 

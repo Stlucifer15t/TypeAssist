@@ -5,9 +5,12 @@ on:
     tags:
       - 'v*-preview.*'
 
+permissions:
+  contents: read
+
 jobs:
   release:
-    name: Build Full preview APK
+    name: Build signed Full preview APK
     runs-on: ubuntu-latest
 
     steps:
@@ -30,12 +33,37 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build Full preview APK
+      - name: Prepare Android release signing
+        id: signing
+        uses: ./.github/actions/android-signing
+        with:
+          keystore_base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore_password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key_alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key_password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build signed Full preview APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.signing.outputs.keystore_path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleFullRelease --stacktrace
 
-      - name: Upload Full APK artifact
+      - name: Verify signed APK
+        run: |
+          apk="app/build/outputs/apk/full/release/app-full-release.apk"
+          test -f "$apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$apksigner"
+          "$apksigner" verify --verbose "$apk"
+
+      - name: Stage preview APK
+        run: cp app/build/outputs/apk/full/release/app-full-release.apk "PromptAI-${GITHUB_REF_NAME}.apk"
+
+      - name: Upload signed Full APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PromptAI-${{ github.ref_name }}-Full-unsigned
-          path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
+          name: PromptAI-${{ github.ref_name }}-Full-signed
+          path: PromptAI-${{ github.ref_name }}.apk
           if-no-files-found: error

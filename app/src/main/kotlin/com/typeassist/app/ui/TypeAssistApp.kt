@@ -10,13 +10,27 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.LoadingIndicatorStyle
@@ -25,12 +39,32 @@ import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.ui.screens.*
 import okhttp3.OkHttpClient
 
+private data class AppDestination(
+    val route: String,
+    val label: String,
+    val icon: ImageVector
+)
+
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
+fun TypeAssistApp(
+    client: OkHttpClient,
+    updateInfo: GitHubRelease?,
+    themeMode: String,
+    onThemeModeChange: (String) -> Unit
+) {
     val context = LocalContext.current
     val gson = GsonBuilder().setPrettyPrinting().create()
     val prefs = context.getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
+    val destinations = remember {
+        listOf(
+            AppDestination("home", "Home", Icons.Default.Home),
+            AppDestination("commands", "Commands", Icons.Default.Edit),
+            AppDestination("snippets", "Snippets", Icons.Default.Favorite),
+            AppDestination("history", "History", Icons.Default.History),
+            AppDestination("settings", "Settings", Icons.Default.Settings)
+        )
+    }
 
     // Determine initial screen
     val hasSeenOnboarding = prefs.getBoolean("has_seen_onboarding", false)
@@ -91,8 +125,35 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    val activeRoute = currentScreen.substringBefore(":")
+    val showNavigationBar = destinations.any { it.route == activeRoute }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        bottomBar = {
+            if (showNavigationBar) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp
+                ) {
+                    destinations.forEach { destination ->
+                        NavigationBarItem(
+                            selected = activeRoute == destination.route,
+                            onClick = { navigateTo(destination.route) },
+                            icon = {
+                                Icon(destination.icon, contentDescription = destination.label)
+                            },
+                            label = { Text(destination.label) },
+                            alwaysShowLabel = false
+                        )
+                    }
+                }
+            }
+        }
+    ) { contentPadding ->
         AnimatedContent(
+            modifier = Modifier.padding(contentPadding).fillMaxSize(),
             targetState = currentScreen,
             label = "Screen Animation",
             transitionSpec = {
@@ -137,6 +198,8 @@ fun TypeAssistApp(client: OkHttpClient, updateInfo: GitHubRelease?) {
                         onSave = { saveConfig(it) },
                         onBack = { navigateTo("home") },
                         onNavigate = { navigateTo(it) },
+                        themeMode = themeMode,
+                        onThemeModeChange = onThemeModeChange,
                         initialTab = tab
                     )
                 }

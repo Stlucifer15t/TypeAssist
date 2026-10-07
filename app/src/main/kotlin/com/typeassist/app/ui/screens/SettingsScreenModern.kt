@@ -11,6 +11,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -58,6 +59,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -88,7 +90,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -107,6 +108,7 @@ import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.SavedGeminiConfig
 import com.typeassist.app.data.repository.UpdateRepository
+import com.typeassist.app.ui.AppThemeMode
 import com.typeassist.app.ui.components.PageHeading
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -130,6 +132,8 @@ fun SettingsScreen(
     onSave: (AppConfig) -> Unit,
     onBack: () -> Unit,
     onNavigate: (String) -> Unit,
+    themeMode: String,
+    onThemeModeChange: (String) -> Unit,
     initialTab: Int = 0
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
@@ -186,7 +190,7 @@ fun SettingsScreen(
                     .padding(bottom = 24.dp)
             ) {
                 when (selectedTab) {
-                    0 -> GeneralSettingsTabModern(config, onSave, onNavigate)
+                    0 -> GeneralSettingsTabModern(config, onSave, onNavigate, themeMode, onThemeModeChange)
                     1 -> AiProviderSettingsTabModern(config, client, onSave)
                     else -> {
                         LocalLlmSetup(config, onSave)
@@ -218,7 +222,9 @@ fun SettingsScreen(
 private fun GeneralSettingsTabModern(
     config: AppConfig,
     onSave: (AppConfig) -> Unit,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    themeMode: String,
+    onThemeModeChange: (String) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -247,8 +253,38 @@ private fun GeneralSettingsTabModern(
             LoadingStyleOption("bars", "Bars", "Equalizer bars animation"),
             LoadingStyleOption("typing", "Typing", "iMessage-style typing bubble"),
             LoadingStyleOption("pill", "Pill", "Rounded pill with text"),
-            LoadingStyleOption("neon", "Neon ring", "Glowing ring with its own authentic neon colour")
+            LoadingStyleOption("neon", "Neon ring", "Rotating electric cyan, blue, violet and magenta glow")
         )
+    }
+
+    ModernSettingsSection(
+        title = "Appearance",
+        description = "Choose a Material 3 theme. AMOLED uses a true-black background to reduce OLED power use."
+    ) {
+        listOf(
+            Triple(AppThemeMode.SYSTEM, "System", "Follow your device appearance."),
+            Triple(AppThemeMode.LIGHT, "Light", "Use the light palette."),
+            Triple(AppThemeMode.DARK, "Dark", "Use the dark palette."),
+            Triple(AppThemeMode.AMOLED, "AMOLED black", "Use true black backgrounds with raised dark surfaces.")
+        ).forEach { (mode, title, description) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onThemeModeChange(mode) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                RadioButton(
+                    selected = themeMode == mode,
+                    onClick = { onThemeModeChange(mode) }
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.SemiBold)
+                    Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 
     ModernSettingsSection(
@@ -359,32 +395,7 @@ private fun GeneralSettingsTabModern(
 
     if (enableLoadingOverlay) {
         if (loadingStyle == "neon") {
-            // The neon ring keeps its authentic glow, so the picker is locked for it.
-            ModernSettingsSection(
-                title = "Indicator colour",
-                description = "Locked for the neon ring so it always stays true to neon."
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(Color(LoadingIndicatorStyle.NEON_COLOR))
-                            .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                    )
-                    Column {
-                        Text("Electric cyan", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Other styles still use the colour you pick below.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+            NeonPaletteSection()
         } else {
             IndicatorColorSection(
                 color = indicatorColor,
@@ -535,7 +546,7 @@ private fun GeneralSettingsTabModern(
                     onClick = {
                         checkingForUpdate = true
                         scope.launch {
-                            val result = UpdateRepository(context).checkForUpdate("estiaksoyeb", "TypeAssist")
+                            val result = UpdateRepository(context).checkForUpdate()
                             checkingForUpdate = false
                             result.onSuccess { release ->
                                 if (release != null) {
@@ -1128,8 +1139,9 @@ private fun ModernSettingsSection(
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
         shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1232,6 +1244,50 @@ private fun SavedProviderRow(
     }
 }
 
+@Composable
+private fun NeonPaletteSection() {
+    val labels = listOf("Cyan", "Blue", "Violet", "Magenta", "Pink")
+
+    ModernSettingsSection(
+        title = "Neon spectrum",
+        description = "A locked, animated palette of vivid neon hues—not a flat tint."
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            LoadingIndicatorStyle.NEON_PALETTE.forEachIndexed { index, neonColor ->
+                Column(
+                    modifier = Modifier.width(48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color(neonColor))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    )
+                    Text(
+                        labels[index],
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "The neon ring cycles through electric cyan, laser blue, ultraviolet, magenta and hot pink. Its colour is fixed to this palette; the custom colour picker remains available for the other styles.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
 /**
  * Settings section for picking the colour of the floating loading indicator: quick presets,
  * a hex field for any colour at all, and an HSV mixer for fine tuning.
@@ -1246,7 +1302,7 @@ private fun IndicatorColorSection(
 
     ModernSettingsSection(
         title = "Indicator colour",
-        description = "Choose any colour for the floating loading indicator."
+        description = "Choose a custom colour for this indicator style."
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1596,7 +1652,7 @@ private fun LoadingStylePreview(
                 val spin by infinite.animateFloat(
                     initialValue = 0f,
                     targetValue = 360f,
-                    animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing)),
+                    animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing)),
                     label = "neonSpin"
                 )
                 val glow by infinite.animateFloat(
@@ -1611,46 +1667,66 @@ private fun LoadingStylePreview(
                     animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
                     label = "neonCore"
                 )
-                val coreColor = Color(LoadingIndicatorStyle.contrastColor(color.toArgb()))
+                val neonColors = LoadingIndicatorStyle.NEON_PALETTE.map { Color(it) }
+                val coreColor = Color.White
                 val sweepAngle = 300f
                 Canvas(modifier = Modifier.size(34.dp)) {
                     val stroke = size.minDimension / 12f
                     val inset = stroke * 3f
                     val arcSize = Size(size.width - inset * 2f, size.height - inset * 2f)
                     val topLeft = Offset(inset, inset)
+                    val neonBrush = Brush.sweepGradient(
+                        0f to neonColors[0].copy(alpha = 0f),
+                        0.08f to neonColors[0].copy(alpha = 0.95f),
+                        0.25f to neonColors[1],
+                        0.45f to neonColors[2],
+                        0.65f to neonColors[3],
+                        0.85f to neonColors[4],
+                        1f to neonColors[0],
+                        center = center
+                    )
+                    val hotCoreBrush = Brush.sweepGradient(
+                        0f to Color.White.copy(alpha = 0f),
+                        0.3f to Color.White.copy(alpha = 0.25f),
+                        0.85f to Color.White.copy(alpha = 0.75f),
+                        1f to Color.White,
+                        center = center
+                    )
 
                     rotate(degrees = spin) {
-                        // Layered halo passes fake a real tube glow on every API level.
+                        // Multiple spectral bloom passes make the locked neon palette visibly glow.
                         drawArc(
-                            color = color.copy(alpha = 0.05f * glow),
+                            brush = neonBrush,
                             startAngle = 0f,
                             sweepAngle = sweepAngle,
                             useCenter = false,
                             topLeft = topLeft,
                             size = arcSize,
+                            alpha = 0.08f * glow,
                             style = Stroke(width = stroke * 5f, cap = StrokeCap.Round)
                         )
                         drawArc(
-                            color = color.copy(alpha = 0.10f * glow),
+                            brush = neonBrush,
                             startAngle = 0f,
                             sweepAngle = sweepAngle,
                             useCenter = false,
                             topLeft = topLeft,
                             size = arcSize,
+                            alpha = 0.16f * glow,
                             style = Stroke(width = stroke * 3.5f, cap = StrokeCap.Round)
                         )
                         drawArc(
-                            color = color.copy(alpha = 0.22f * glow),
+                            brush = neonBrush,
                             startAngle = 0f,
                             sweepAngle = sweepAngle,
                             useCenter = false,
                             topLeft = topLeft,
                             size = arcSize,
+                            alpha = 0.28f * glow,
                             style = Stroke(width = stroke * 2f, cap = StrokeCap.Round)
                         )
-                        // Dim track the light travels along.
                         drawArc(
-                            color = color.copy(alpha = 0.17f),
+                            color = neonColors[0].copy(alpha = 0.16f),
                             startAngle = 0f,
                             sweepAngle = 360f,
                             useCenter = false,
@@ -1658,15 +1734,8 @@ private fun LoadingStylePreview(
                             size = arcSize,
                             style = Stroke(width = stroke)
                         )
-                        // The lit tube, with a tail that fades out.
                         drawArc(
-                            brush = Brush.sweepGradient(
-                                0f to color.copy(alpha = 0f),
-                                0.3f to color.copy(alpha = 0.35f),
-                                0.85f to color,
-                                1f to color,
-                                center = center
-                            ),
+                            brush = neonBrush,
                             startAngle = 0f,
                             sweepAngle = sweepAngle,
                             useCenter = false,
@@ -1674,15 +1743,8 @@ private fun LoadingStylePreview(
                             size = arcSize,
                             style = Stroke(width = stroke, cap = StrokeCap.Round)
                         )
-                        // White-hot core of the tube.
                         drawArc(
-                            brush = Brush.sweepGradient(
-                                0f to Color.White.copy(alpha = 0f),
-                                0.3f to Color.White.copy(alpha = 0.25f),
-                                0.85f to Color.White.copy(alpha = 0.7f),
-                                1f to Color.White,
-                                center = center
-                            ),
+                            brush = hotCoreBrush,
                             startAngle = 0f,
                             sweepAngle = sweepAngle,
                             useCenter = false,
@@ -1690,7 +1752,6 @@ private fun LoadingStylePreview(
                             size = arcSize,
                             style = Stroke(width = stroke * 0.45f, cap = StrokeCap.Round)
                         )
-                        // Bright leading head.
                         val radians = Math.toRadians(sweepAngle.toDouble())
                         val radius = arcSize.width / 2f
                         drawCircle(
