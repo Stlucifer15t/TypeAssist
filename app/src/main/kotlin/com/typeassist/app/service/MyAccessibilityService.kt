@@ -27,6 +27,7 @@ import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.StreamThrottle
+import com.typeassist.app.utils.ScreenTextExtractor
 import okhttp3.*
 import java.util.regex.Pattern
 import android.util.Log
@@ -46,6 +47,28 @@ class MyAccessibilityService : AccessibilityService() {
          * as our own echo rather than the user typing.
          */
         private const val ECHO_WINDOW_MS = 1500L
+
+        /** Trailing shortcuts that read the screen. */
+        private const val SCREEN_REPLY_TRIGGER = ".reply"
+        private const val SCREEN_SUMMARY_TRIGGER = ".sum"
+        private const val SCREEN_ASK_TRIGGER = ".ta"
+
+        /** Marker that makes a normal `.ta` question refer to what is on screen. */
+        private const val SCREEN_ASK_MARKER = "@screen"
+
+        private const val SCREEN_REPLY_PROMPT =
+            "You are drafting a reply in an ongoing conversation. The visible screen text is provided, " +
+                "labelled with who wrote each part when it could be detected. Write only the reply " +
+                "message, in the user's own voice, matching the conversation's language, tone and " +
+                "context. Do not add quotes, labels or explanations."
+
+        private const val SCREEN_SUMMARY_PROMPT =
+            "Summarize the content on the screen into a few short bullet points. Keep only the " +
+                "important information. Return only the summary."
+
+        private const val SCREEN_ANSWER_PROMPT =
+            "Answer the user's question using only the screen content provided. Be concise and " +
+                "return only the answer."
     }
 
     external fun stringFromJNI(): String
@@ -395,6 +418,11 @@ class MyAccessibilityService : AccessibilityService() {
                     return
                 }
                 
+                // -- Screen-aware commands (.reply / .sum / .ta with @screen) --
+                // Checked before the user's triggers so they win while screen context is on, and
+                // skipped entirely when it is off: this feature is opt-in.
+                if (maybeHandleScreenCommand(config, currentText, inputNode)) return
+
                 val triggers = config.triggers
                 val inlineCommands = config.inlineCommands
 
@@ -585,6 +613,90 @@ class MyAccessibilityService : AccessibilityService() {
         "local" -> localLlmClient
         else -> geminiApiClient
     }
+
+    // --- Screen-aware commands ----------------------------------------------------------------
+
+    /**
+     * Handles the commands that read the screen: `.reply`, `.sum` and `.ta` when the prompt
+     * contains "@screen". Returns true when the text was consumed (the command ran, was refused, or
+     * the screen could not be read), false when the text should be handled as a normal command.
+     */
+    private fun maybeHandleScreenCommand(
+        config: AppConfig,
+        currentText: String,
+        inputNode: AccessibilityNodeInfo
+    ): Boolean {
+        val replyIndex = trailingCommandIndex(currentText, SCREEN_REPLY_TRIGGER, config)
+        val summaryIndex = trailingCommandIndex(currentText, SCREEN_SUMMARY_TRIGGER, config)
+        val askIndex = trailingCommandIndex(currentText, SCREEN_ASK_TRIGGER, config)
+        val asksAboutScreen = askIndex >= 0 && currentText.contains(SCREEN_ASK_MARKER, ignoreCase = true)
+
+        val instruction: String
+        val prompt: String
+        when {
+            replyIndex >= 0 -> {
+                instruction = currentText.substring(0, replyIndex).trim()
+                prompt = SCREEN_REPLY_PROMPT
+            }
+            summaryIndex >= 0 -> {
+                instruction = currentText.substring(0, summaryIndex).trim()
+                prompt = SCREEN_SUMMARY_PROMPT
+            }
+            asksAboutScreen -> {
+                instruction = currentText.substring(0, askIndex)
+                    .replace(SCREEN_ASK_MARKER, "", ignoreCase = true)
+                    .trim()
+                prompt = SCREEN_ANSWER_PROMPT
+            }
+            else -> return false
+        }
+
+        if (!config.screenContextEnabled) {
+            // Asking the screen a question must never be sent as literal text; the plain .reply and
+            // .sum shortcuts stay out of the way so a user-defined command with the same trigger
+            // keeps working.
+            if (asksAboutScreen) {
+                overlayManager.showToast("Screen context is off. Turn it on in Settings → Screen context.")
+                return true
+            }
+            return false
+        }
+
+        val reader = ScreenContextReader(this)
+        val foreground = reader.foregroundPackage()
+        if (ScreenTextExtractor.isPackageBlocked(config.screenContextBlockedPackages, foreground)) {
+            overlayManager.showToast("Screen reading is disabled for this app.")
+            return true
+        }
+
+        val screenContext = reader.readScreenContext(config)
+        if (screenContext.isNullOrBlank()) {
+            overlayManager.showToast("Could not read this screen")
+            return true
+        }
+
+        val userText = buildString {
+            append(screenContext)
+            if (instruction.isNotBlank()) {
+                append("\n\n")
+                append("Additional instruction: ")
+                append(instruction)
+            }
+        }
+
+        originalTextCache = currentText
+        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+        lastNode = inputNode
+        undoCacheTimestamp = System.currentTimeMillis()
+
+        // The answer replaces what the user typed, like every other command.
+        executeAiCommand(config, prompt, userText, inputNode, currentText) { aiText -> aiText }
+        return true
+    }
+
+    /** Index of a command typed at the end of the field, honouring the trigger settings. */
+    private fun trailingCommandIndex(text: String, command: String, config: AppConfig): Int =
+        findTriggerIndex(text, command, config.allowTriggerAnywhere, config.ignorePrecedingWhitespace)
 
     // --- Streaming ---------------------------------------------------------------------------
 
