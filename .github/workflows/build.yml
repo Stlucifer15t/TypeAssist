@@ -66,3 +66,19 @@ jobs:
           name: PromptAI-Full-unsigned
           path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
           if-no-files-found: error
+
+      # TEMPORARY diagnostic: surfaces build failures as annotations we can read
+      - name: Diagnose missing APK
+        if: failure()
+        run: |
+          {
+            echo "=== apk files ==="
+            find app/build/outputs/apk -type f -name "*.apk" 2>/dev/null || echo "(none)"
+            echo "=== gradle test result ==="
+            grep -E "^(e: |w: )|FAILURE:|What went wrong|Execution failed|BUILD SUCCESSFUL|BUILD FAILED" build.log 2>/dev/null | head -25 || echo "(no build.log)"
+            echo "=== build.log tail ==="
+            tail -12 build.log 2>/dev/null || true
+          } > diag.txt
+          while IFS= read -r line; do
+            echo "::error::${line//%/\%25}"
+          done < diag.txt
