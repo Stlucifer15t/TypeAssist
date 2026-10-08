@@ -27,6 +27,7 @@ import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.StreamThrottle
+import com.typeassist.app.ui.ThemePalettes
 import com.typeassist.app.utils.ScreenTextExtractor
 import okhttp3.*
 import java.util.regex.Pattern
@@ -57,10 +58,15 @@ class MyAccessibilityService : AccessibilityService() {
         private const val SCREEN_ASK_MARKER = "@screen"
 
         private const val SCREEN_REPLY_PROMPT =
-            "You are drafting a reply in an ongoing conversation. The visible screen text is provided, " +
-                "labelled with who wrote each part when it could be detected. Write only the reply " +
-                "message, in the user's own voice, matching the conversation's language, tone and " +
-                "context. Do not add quotes, labels or explanations."
+            "You are drafting a reply in an ongoing conversation for the user. The screen text is " +
+                "provided. Lines starting with Me: were written by the user, and lines starting with " +
+                "Them: were written by the other person. Copy the user's own writing style from the " +
+                "Me: lines: their language, vocabulary, sentence length, punctuation, capitalisation, " +
+                "emoji use and formality. If there are no Me: lines, keep the reply short and plain and " +
+                "match the conversation's language and tone. Do not use exaggerated, flowery or robotic " +
+                "phrasing (for example \"I hope this finds you well\", \"absolutely delighted\" or " +
+                "\"delve into\"), and do not over-explain. Write only the reply message, with no quotes, " +
+                "labels or explanations."
 
         private const val SCREEN_SUMMARY_PROMPT =
             "Summarize the content on the screen into a few short bullet points. Keep only the " +
@@ -176,8 +182,22 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isDarkMode(): Boolean {
+    /** True while the device is in night mode. Only used to resolve the System appearance. */
+    private fun systemIsDark(): Boolean {
         return (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+
+    /**
+     * Theme for the floating overlays: the Appearance chosen in the app, with System resolved
+     * against the device's night mode. Never throws, so a bad preference cannot break the service.
+     */
+    private fun overlayThemeMode(): String {
+        val stored = try {
+            getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE).getString("theme_mode", null)
+        } catch (e: Exception) {
+            null
+        }
+        return ThemePalettes.resolveMode(stored, systemIsDark())
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -303,7 +323,7 @@ class MyAccessibilityService : AccessibilityService() {
                                 // Show selection overlay
                                 Log.d(TAG, "Showing selection overlay for '${s.trigger}' with ${variations.size} variations")
                                 pendingTriggerRunnable?.let { debounceHandler.removeCallbacks(it) }
-                                overlayManager.showSnippetSelection(s.trigger, variations, isDarkMode()) { selected ->
+                                overlayManager.showSnippetSelection(s.trigger, variations, overlayThemeMode()) { selected ->
                                     Log.d(TAG, "Variation selected: '$selected'")
                                     if (!inputNode.refresh()) {
                                         Log.e(TAG, "Could not refresh input node for insertion")
@@ -507,20 +527,18 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
-        val nightModeFlags = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
-        val isDarkMode = nightModeFlags == android.content.res.Configuration.UI_MODE_NIGHT_YES
         val wordCount = cleanedText.split("\\s+".toRegex()).size
 
         if (wordCount > 15 && config.enablePreviewDialog) {
-            overlayManager.showPreviewDialog(cleanedText, isDarkMode) {
+            overlayManager.showPreviewDialog(cleanedText, overlayThemeMode()) {
                 pasteText(node, render(cleanedText), moveCursorToEnd = true)
                 overlayManager.showUndoButton(config)
-                showResultChipFor(config, node)
+                showResultChipFor(config)
             }
         } else {
             pasteText(node, render(cleanedText), moveCursorToEnd = true)
             overlayManager.showUndoButton(config)
-            showResultChipFor(config, node)
+            showResultChipFor(config)
         }
     }
 
@@ -575,8 +593,8 @@ class MyAccessibilityService : AccessibilityService() {
             if (config.showResultChip) {
                 overlayManager.showResultChip(
                     config = config,
-                    anchor = node?.let { nodeBounds(it) },
                     actions = listOf(OverlayManager.ChipAction("Stop") { cancelActiveStream(restoreOriginal = true) }),
+                    themeMode = overlayThemeMode(),
                     autoDismissMs = null
                 )
             }
@@ -802,11 +820,10 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun showResultChipFor(config: AppConfig, node: AccessibilityNodeInfo) {
+    private fun showResultChipFor(config: AppConfig) {
         if (!config.showResultChip) return
         overlayManager.showResultChip(
             config = config,
-            anchor = nodeBounds(node),
             actions = listOf(
                 OverlayManager.ChipAction("Accept") { overlayManager.hideResultChip() },
                 OverlayManager.ChipAction("Reject") {
@@ -817,7 +834,8 @@ class MyAccessibilityService : AccessibilityService() {
                     overlayManager.hideResultChip()
                     retryLastCommand(config)
                 }
-            )
+            ),
+            themeMode = overlayThemeMode()
         )
     }
 
@@ -831,16 +849,6 @@ class MyAccessibilityService : AccessibilityService() {
         lastNode = node
         undoCacheTimestamp = System.currentTimeMillis()
         executeAiCommand(config, command.prompt, command.userText, node, command.originalFieldText, command.render)
-    }
-
-    private fun nodeBounds(node: AccessibilityNodeInfo): android.graphics.Rect? {
-        return try {
-            val rect = android.graphics.Rect()
-            node.getBoundsInScreen(rect)
-            rect
-        } catch (e: Exception) {
-            null
-        }
     }
 
     /** True when the text is exactly what we last wrote ourselves, so it must not be re-processed. */

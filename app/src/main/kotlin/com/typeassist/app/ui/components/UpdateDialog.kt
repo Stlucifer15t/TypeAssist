@@ -41,11 +41,11 @@ fun VersionAnnouncementDialog(versionName: String, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Here’s what’s new:", fontWeight = FontWeight.SemiBold)
-                Text("• An Accept · Reject · Retry chip floats next to the field after every AI command — Reject puts your original text back, Retry runs the command again.")
-                Text("• Answers from Gemini and OpenAI-compatible providers now stream into the field while the model is still writing, and the chip turns into Stop.")
-                Text("• Screen-aware commands: .reply, .sum, and .ta with @screen can answer from what is on your screen. Off until you turn it on in Settings → Screen context, and never in the apps on your blocklist.")
-                Text("• Settings → Replies controls the chip and streaming; both are on by default.")
-                Text("• This release announcement appears once for this installed version.")
+                Text("• The Accept · Reject · Retry chip now appears in the middle of the screen, where the keyboard is less likely to cover it.")
+                Text("• .reply copies your writing style from the messages marked Me: and avoids stiff or exaggerated wording.")
+                Text("• Dark and AMOLED black look different now. Dark is a lighter dark grey, and AMOLED is true black with near-black cards.")
+                Text("• Floating chips, the preview card and the snippet picker follow the Appearance you pick in Settings, not only your phone’s night mode.")
+                Text("• The Appearance list shows a small colour preview for each theme.")
             }
         },
         confirmButton = {
