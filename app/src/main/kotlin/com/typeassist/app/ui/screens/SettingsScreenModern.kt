@@ -244,6 +244,7 @@ private fun GeneralSettingsTabModern(
     var historyEnabled by remember(config.isHistoryEnabled) { mutableStateOf(config.isHistoryEnabled) }
     var previewEnabled by remember(config.enablePreviewDialog) { mutableStateOf(config.enablePreviewDialog) }
     var showResultChip by remember(config.showResultChip) { mutableStateOf(config.showResultChip) }
+    var streamResponses by remember(config.streamResponses) { mutableStateOf(config.streamResponses) }
     var timeout by remember(config.apiTimeoutSeconds) { mutableStateOf(config.apiTimeoutSeconds.toFloat()) }
     var checkingForUpdate by remember { mutableStateOf(false) }
 
@@ -463,7 +464,19 @@ private fun GeneralSettingsTabModern(
             showResultChip = it
             onSave(config.copy(showResultChip = it))
         }
+        HorizontalDivider()
+        ModernSwitchRow(
+            title = "Stream responses",
+            description = "Write the answer into the field while the model is still typing it. " +
+                "Gemini and OpenAI-compatible providers stream; Cloudflare and local models reply in one piece.",
+            checked = streamResponses
+        ) {
+            streamResponses = it
+            onSave(config.copy(streamResponses = it))
+        }
     }
+
+    ScreenContextSettingsSection(config, onSave)
 
     ModernSettingsSection(
         title = "Triggers & text",
@@ -1152,6 +1165,140 @@ private fun AiProviderSettingsTabModern(config: AppConfig, client: OkHttpClient,
             },
             shape = MaterialTheme.shapes.large
         )
+    }
+}
+
+/**
+ * Screen context: opt-in reading of what is visible on screen for `.reply`, `.sum` and
+ * `@screen` questions. Off by default, with a plain-language warning and an app blocklist.
+ */
+@Composable
+private fun ScreenContextSettingsSection(
+    config: AppConfig,
+    onSave: (AppConfig) -> Unit
+) {
+    var enabled by remember(config.screenContextEnabled) { mutableStateOf(config.screenContextEnabled) }
+    var chatLabels by remember(config.screenContextChatLabels) { mutableStateOf(config.screenContextChatLabels) }
+    var blockedPackages by remember(config.screenContextBlockedPackages) {
+        mutableStateOf(config.screenContextBlockedPackages.orEmpty().toList())
+    }
+    var newPackage by remember { mutableStateOf("") }
+
+    ModernSettingsSection(
+        title = "Screen context",
+        description = "Commands that read what is on your screen: .reply, .sum and .ta with @screen."
+    ) {
+        ModernSwitchRow(
+            title = "Allow screen context",
+            description = "Off by default. Nothing is read until you use one of the commands above.",
+            checked = enabled
+        ) {
+            enabled = it
+            onSave(config.copy(screenContextEnabled = it))
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+            )
+        ) {
+            Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "When you use .reply, .sum or @screen, the visible text on your screen is sent to " +
+                        "the AI provider you selected so it can answer. Prompt AI never reads the " +
+                        "screen in the background, never stores what it read, and skips the apps in " +
+                        "the list below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+        ModernSwitchRow(
+            title = "Label chat sides",
+            description = "In conversation-style screens, mark blocks as “Them:” or “Me:” using their " +
+                "position on screen.",
+            checked = chatLabels
+        ) {
+            chatLabels = it
+            onSave(config.copy(screenContextChatLabels = it))
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "Never read in these apps",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Banking, payment and password-manager apps are listed to start with. Add any other " +
+                "package you want kept out.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(10.dp))
+
+        blockedPackages.forEach { packageName ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    packageName,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(onClick = {
+                    val updated = blockedPackages - packageName
+                    blockedPackages = updated
+                    onSave(config.copy(screenContextBlockedPackages = updated.toMutableList()))
+                }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Remove $packageName",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newPackage,
+                onValueChange = { newPackage = it },
+                modifier = Modifier.weight(1f),
+                label = { Text("App package name") },
+                placeholder = { Text("com.example.bank") },
+                singleLine = true
+            )
+            Spacer(Modifier.width(10.dp))
+            Button(
+                enabled = newPackage.isNotBlank() && newPackage.trim() !in blockedPackages,
+                onClick = {
+                    val updated = blockedPackages + newPackage.trim()
+                    blockedPackages = updated
+                    newPackage = ""
+                    onSave(config.copy(screenContextBlockedPackages = updated.toMutableList()))
+                }
+            ) {
+                Text("Add")
+            }
+        }
     }
 }
 
