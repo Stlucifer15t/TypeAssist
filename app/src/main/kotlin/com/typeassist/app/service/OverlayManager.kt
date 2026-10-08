@@ -378,8 +378,145 @@ class OverlayManager(private val context: Context) {
         return container
     }
 
-    fun showUndoButton(config: AppConfig) {
-        if (!config.enableUndoOverlay) return
+    // --- Result chip (Accept / Reject / Retry) -------------------------------------------------
+
+    /** One tappable action on the result chip. */
+    data class ChipAction(val label: String, val onClick: () -> Unit)
+
+    private var resultChipView: LinearLayout? = null
+    private var resultChipParams: WindowManager.LayoutParams? = null
+
+    private val hideResultChipRunnable = Runnable { hideResultChip() }
+
+    /**
+     * Small floating chip shown next to the field after a command replaced its text.
+     *
+     * The window is [WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE], so tapping it never takes
+     * focus away from the text field (the keyboard and cursor stay where they were).
+     *
+     * @param anchor bounds of the edited field, used to place the chip underneath it (or above it
+     *   when there is no room below).
+     * @param autoDismissMs how long the chip stays before it hides itself; `null` keeps it visible
+     *   until the caller hides it (used while a stream is still running).
+     */
+    fun showResultChip(
+        config: AppConfig,
+        anchor: android.graphics.Rect?,
+        actions: List<ChipAction>,
+        autoDismissMs: Long? = RESULT_CHIP_TIMEOUT_MS
+    ) {
+        if (actions.isEmpty()) return
+        mainHandler.post {
+            hideResultChipInternal()
+            if (actions.isEmpty()) return@post
+
+            val card = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = GradientDrawable().apply {
+                    setColor(0xF21C1B1F.toInt())
+                    cornerRadius = dpF(18f)
+                    setStroke(dpF(1f).toInt().coerceAtLeast(1), 0x66818CF8)
+                }
+                elevation = dpF(8f)
+                isClickable = true
+                isFocusable = false
+            }
+
+            actions.forEachIndexed { index, action ->
+                if (index > 0) {
+                    card.addView(View(context).apply {
+                        layoutParams = LinearLayout.LayoutParams(dpF(1f).toInt().coerceAtLeast(1), dpF(18f).toInt())
+                        setBackgroundColor(0x33FFFFFF)
+                    })
+                }
+                card.addView(TextView(context).apply {
+                    text = action.label
+                    textSize = 13f
+                    setTextColor(actionColor(action.label))
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setPadding(dpF(14f).toInt(), dpF(10f).toInt(), dpF(14f).toInt(), dpF(10f).toInt())
+                    isFocusable = false
+                    setOnClickListener { action.onClick() }
+                })
+            }
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = anchor?.left ?: 0
+                y = anchor?.bottom ?: 0
+            }
+
+            resultChipView = card
+            resultChipParams = params
+            try {
+                windowManager?.addView(card, params)
+                card.post { positionResultChip(card, params, anchor) }
+            } catch (e: Exception) {
+                resultChipView = null
+                resultChipParams = null
+                return@post
+            }
+            if (autoDismissMs != null) {
+                mainHandler.postDelayed(hideResultChipRunnable, autoDismissMs)
+            }
+        }
+    }
+
+    fun hideResultChip() {
+        mainHandler.removeCallbacks(hideResultChipRunnable)
+        mainHandler.post { hideResultChipInternal() }
+    }
+
+    private fun hideResultChipInternal() {
+        val view = resultChipView
+        resultChipView = null
+        resultChipParams = null
+        if (view != null) {
+            try { windowManager?.removeView(view) } catch (e: Exception) {}
+        }
+    }
+
+    /** Keeps the chip on screen: under the field when it fits, above it otherwise. */
+    private fun positionResultChip(
+        view: View,
+        params: WindowManager.LayoutParams,
+        anchor: android.graphics.Rect?
+    ) {
+        val metrics = context.resources.displayMetrics
+        val margin = dpF(10f).toInt()
+        val width = view.width.takeIf { it > 0 } ?: return
+        val height = view.height
+
+        val centerX = anchor?.centerX() ?: (metrics.widthPixels / 2)
+        var x = centerX - width / 2
+        var y = (anchor?.bottom ?: (metrics.heightPixels / 2)) + margin
+        if (anchor != null && y + height > metrics.heightPixels - margin) {
+            y = anchor.top - height - margin
+        }
+
+        x = x.coerceIn(margin, (metrics.widthPixels - width - margin).coerceAtLeast(margin))
+        y = y.coerceIn(margin, (metrics.heightPixels - height - margin).coerceAtLeast(margin))
+
+        params.x = x
+        params.y = y
+        try { windowManager?.updateViewLayout(view, params) } catch (e: Exception) {}
+    }
+
+    private fun actionColor(label: String): Int = when (label.lowercase()) {
+        "accept" -> 0xFF4ADE80.toInt()
+        "reject", "stop", "cancel" -> 0xFFFB7185.toInt()
+        else -> 0xFF818CF8.toInt()
+    }
+
+    fun showUndoButton(config: AppConfig) {        if (!config.enableUndoOverlay) return
         mainHandler.post {
             if (undoView != null) return@post
             undoView = FrameLayout(context)
@@ -709,6 +846,12 @@ class OverlayManager(private val context: Context) {
         hideUndoButton()
         hidePreviewDialog()
         hideSnippetSelection()
+        hideResultChip()
+    }
+
+    companion object {
+        /** How long the Accept / Reject / Retry chip stays on screen before it hides itself. */
+        const val RESULT_CHIP_TIMEOUT_MS = 6000L
     }
 }
 

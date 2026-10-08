@@ -33,7 +33,14 @@ data class AppConfig(
     var enablePreviewDialog: Boolean = false,
     var allowTriggerAnywhere: Boolean = false,
     var ignorePrecedingWhitespace: Boolean = false,
-    var apiTimeoutSeconds: Long = 30L
+    var apiTimeoutSeconds: Long = 30L,
+    // --- Added in config version 2 (see ConfigMigrations) ---
+    var configVersion: Int = CURRENT_CONFIG_VERSION,
+    var showResultChip: Boolean = true,
+    var streamResponses: Boolean = true,
+    var screenContextEnabled: Boolean = false,
+    var screenContextChatLabels: Boolean = true,
+    var screenContextBlockedPackages: MutableList<String> = defaultBlockedScreenPackages()
 ) : Serializable
 
 data class CloudflareConfig(
@@ -62,6 +69,75 @@ data class LocalLlmConfig(
     var useGpu: Boolean = false,
     var disableReasoning: Boolean = false
 ) : Serializable
+
+/**
+ * Normalised endpoint of a custom API profile, so copied/pasted variants of the same
+ * server (`https://host/v1`, `https://host/v1/`, `https://host/v1/models`, …) count as one.
+ */
+private fun normaliseEndpoint(baseUrl: String): String =
+    baseUrl.trim()
+        .removeSuffix("/")
+        .removeSuffix("/chat/completions")
+        .removeSuffix("/models")
+        .removeSuffix("/")
+        .lowercase()
+
+/** Identity of a saved custom profile: same endpoint + API key = one profile (the model is not part of it). */
+fun CustomApiConfig.identityKey(): String =
+    normaliseEndpoint(baseUrl) + "\u0000" + apiKey.trim()
+
+/** Identity of a saved Gemini profile: the API key alone identifies it (the endpoint is fixed). */
+fun SavedGeminiConfig.identityKey(): String = apiKey.trim()
+
+/** Identity of a saved Cloudflare profile: account ID + API token. */
+fun CloudflareConfig.identityKey(): String =
+    accountId.trim() + "\u0000" + apiToken.trim()
+
+/**
+ * Collapses duplicate saved profiles so only ONE entry survives per identity
+ * (custom: endpoint + key, Gemini: key, Cloudflare: account + token, local: model path).
+ *
+ * When duplicates exist the LAST entry wins — it is the most recently saved one, so it carries the
+ * model the user is actually using — while the position of the first occurrence is kept, so the
+ * list order does not jump around. Changing the model on an already-saved endpoint therefore
+ * updates that row instead of adding another one.
+ *
+ * The same config instance is returned when there was nothing to merge, so callers can cheaply
+ * detect a change with a reference comparison.
+ */
+fun mergeDuplicateProfiles(config: AppConfig): AppConfig {
+    var changed = false
+
+    fun <T> dedupe(entries: List<T>, keyOf: (T) -> String): MutableList<T> {
+        val byIdentity = LinkedHashMap<String, T>()
+        for (entry in entries) {
+            if (byIdentity.containsKey(keyOf(entry))) changed = true
+            // LinkedHashMap.put keeps the original position and overwrites the value.
+            byIdentity[keyOf(entry)] = entry
+        }
+        return byIdentity.values.toMutableList()
+    }
+
+    val custom = dedupe(config.savedCustomConfigs.orEmpty()) { it.identityKey() }
+    val gemini = dedupe(config.savedGeminiConfigs.orEmpty()) { it.identityKey() }
+    val cloudflare = dedupe(config.savedCloudflareConfigs.orEmpty()) { it.identityKey() }
+
+    val storedLocalPaths = config.savedLocalModels.orEmpty()
+    val localPaths = storedLocalPaths.map { it.trim() }.filter { it.isNotEmpty() }
+    if (localPaths != storedLocalPaths) changed = true
+    val local = dedupe(localPaths) { it }
+
+    return if (changed) {
+        config.copy(
+            savedCustomConfigs = custom,
+            savedGeminiConfigs = gemini,
+            savedCloudflareConfigs = cloudflare,
+            savedLocalModels = local
+        )
+    } else {
+        config
+    }
+}
 
 /** Returns true if the model filename suggests it is a reasoning/thinking model. */
 fun isReasoningModel(modelPath: String): Boolean {
@@ -139,6 +215,12 @@ fun createDefaultConfig(): AppConfig {
         enablePreviewDialog = false,
         allowTriggerAnywhere = false,
         ignorePrecedingWhitespace = false,
-        apiTimeoutSeconds = 30L
+        apiTimeoutSeconds = 30L,
+        configVersion = CURRENT_CONFIG_VERSION,
+        showResultChip = true,
+        streamResponses = true,
+        screenContextEnabled = false,
+        screenContextChatLabels = true,
+        screenContextBlockedPackages = defaultBlockedScreenPackages()
     )
 }

@@ -16,13 +16,18 @@ import androidx.core.app.NotificationCompat
 import com.google.gson.Gson
 import com.typeassist.app.R
 import com.typeassist.app.api.AiProvider
+import com.typeassist.app.api.AiStream
+import com.typeassist.app.api.ApiErrorFormatter
 import com.typeassist.app.api.CloudflareApiClient
 import com.typeassist.app.api.CustomApiClient
 import com.typeassist.app.api.GeminiApiClient
 import com.typeassist.app.api.LocalLlmClient
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.LoadingIndicatorStyle
+import com.typeassist.app.data.StreamThrottle
+import com.typeassist.app.utils.ScreenTextExtractor
 import okhttp3.*
 import java.util.regex.Pattern
 import android.util.Log
@@ -36,6 +41,34 @@ class MyAccessibilityService : AccessibilityService() {
         init {
             System.loadLibrary("typeassist")
         }
+
+        /**
+         * How long after we write text ourselves an identical text-changed event is still treated
+         * as our own echo rather than the user typing.
+         */
+        private const val ECHO_WINDOW_MS = 1500L
+
+        /** Trailing shortcuts that read the screen. */
+        private const val SCREEN_REPLY_TRIGGER = ".reply"
+        private const val SCREEN_SUMMARY_TRIGGER = ".sum"
+        private const val SCREEN_ASK_TRIGGER = ".ta"
+
+        /** Marker that makes a normal `.ta` question refer to what is on screen. */
+        private const val SCREEN_ASK_MARKER = "@screen"
+
+        private const val SCREEN_REPLY_PROMPT =
+            "You are drafting a reply in an ongoing conversation. The visible screen text is provided, " +
+                "labelled with who wrote each part when it could be detected. Write only the reply " +
+                "message, in the user's own voice, matching the conversation's language, tone and " +
+                "context. Do not add quotes, labels or explanations."
+
+        private const val SCREEN_SUMMARY_PROMPT =
+            "Summarize the content on the screen into a few short bullet points. Keep only the " +
+                "important information. Return only the summary."
+
+        private const val SCREEN_ANSWER_PROMPT =
+            "Answer the user's question using only the screen content provided. Be concise and " +
+                "return only the answer."
     }
 
     external fun stringFromJNI(): String
@@ -56,6 +89,35 @@ class MyAccessibilityService : AccessibilityService() {
     private var lastNode: AccessibilityNodeInfo? = null
     private var originalTextCache: String = ""
     private var undoCacheTimestamp: Long = 0L
+
+    // -- Result chip / streaming / echo detection --
+    /** The command that produced the current result, so the chip can offer Retry. */
+    private var lastCommand: PendingAiCommand? = null
+
+    /** Text we last wrote into a field ourselves; events echoing it are ignored. */
+    private var lastAppliedText: String? = null
+    private var lastAppliedAt: Long = 0L
+
+    private val uiHandler = Handler(Looper.getMainLooper())
+
+    /** Turns the model's answer into the full field text for the command that is running. */
+    private data class PendingAiCommand(
+        val prompt: String,
+        val userText: String,
+        val render: (String) -> String,
+        val originalFieldText: String
+    )
+
+    // -- In-flight stream --
+    private var activeStream: AiStream? = null
+    private var activeStreamNode: AccessibilityNodeInfo? = null
+    private var activeStreamPreText: String? = null
+    private var streamDeltaCount = 0
+    private val streamBuffer = StringBuilder()
+    private val streamThrottle = StreamThrottle()
+
+    /** Incremented for every stream so late callbacks from a cancelled one are ignored. */
+    private var streamGeneration = 0
 
     // -- Debounce --
     private val debounceHandler = Handler(Looper.getMainLooper())
@@ -133,6 +195,16 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
+        // The focused field changed: the chip no longer refers to what the user is looking at, and
+        // an in-flight stream must not keep writing into a field that lost focus. Focus events that
+        // immediately follow our own edit (same text) are ignored, so writing a result cannot
+        // dismiss the chip it just showed.
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+            val focusedText = try { event.source?.text?.toString() } catch (e: Exception) { null }
+            if (!isOwnEcho(focusedText.orEmpty())) onUserInterruption()
+            return
+        }
+
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
             // Skip processing for internal events with no actual changes
             if (event.addedCount == 0 && event.removedCount == 0) return
@@ -148,6 +220,14 @@ class MyAccessibilityService : AccessibilityService() {
             }
             Log.d(TAG, "Current Text: '$currentText'")
 
+            // Text that matches exactly what we just wrote is our own echo (a paste or a streamed
+            // chunk), not the user typing: ignore it, otherwise every update would look like an edit.
+            if (isOwnEcho(currentText)) return
+
+            // The user (or another app) really changed the field: stop streaming and put the chip
+            // away, then carry on parsing what they typed.
+            onUserInterruption()
+
             val prefs = getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
             val configJson = prefs.getString("config_json", null)
             if (configJson == null) {
@@ -157,10 +237,11 @@ class MyAccessibilityService : AccessibilityService() {
 
             try {
                 val gson = com.google.gson.GsonBuilder().create()
-                val config = gson.fromJson(configJson, AppConfig::class.java)
-                // Gson skips constructors, so a config saved before the indicator colour/size
-                // existed arrives with 0 for both. Restore the real defaults.
-                LoadingIndicatorStyle.sanitize(config)
+                // Gson skips constructors, so fields that did not exist when the config was saved
+                // arrive as zero values. Restore their defaults before anything reads them.
+                val config = ConfigMigrations.apply(
+                    LoadingIndicatorStyle.sanitize(gson.fromJson(configJson, AppConfig::class.java))
+                )
                 
                 // Migration: Convert old single content to contents list
                 config.snippets?.forEach { snippet ->
@@ -194,19 +275,9 @@ class MyAccessibilityService : AccessibilityService() {
                             lastNode = inputNode
                             undoCacheTimestamp = System.currentTimeMillis()
 
-                            overlayManager.showLoading(config)
-                            overlayManager.hideUndoButton()
-
                             val systemPrompt = "Rewrite the following text according to this instruction: $instruction. Return ONLY the rewritten text, no explanations, no chat."
-                            
-                        performAICall(config, systemPrompt, contextText) { result ->
-                            overlayManager.hideLoading()
-                            result.onSuccess { aiText ->
-                                processAiResult(config, inputNode, currentText, aiText, replaceWhole = true)
-                            }.onFailure {
-                                overlayManager.showToast(it.message ?: "Unknown error")
-                            }
-                        }
+
+                            executeAiCommand(config, systemPrompt, contextText, inputNode, currentText) { aiText -> aiText }
 
                             return
                         }
@@ -350,6 +421,11 @@ class MyAccessibilityService : AccessibilityService() {
                     return
                 }
                 
+                // -- Screen-aware commands (.reply / .sum / .ta with @screen) --
+                // Checked before the user's triggers so they win while screen context is on, and
+                // skipped entirely when it is off: this feature is opt-in.
+                if (maybeHandleScreenCommand(config, currentText, inputNode)) return
+
                 val triggers = config.triggers
                 val inlineCommands = config.inlineCommands
 
@@ -369,20 +445,13 @@ class MyAccessibilityService : AccessibilityService() {
                             originalTextCache = currentText
                             if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
                             lastNode = inputNode
+                            undoCacheTimestamp = System.currentTimeMillis()
 
-                            overlayManager.showLoading(config)
-                            overlayManager.hideUndoButton()
-
-                            performAICall(config, inlinePromptTemplate, userPrompt) { result ->
-                                overlayManager.hideLoading()
-                                result.onSuccess { aiText ->
-                                    Log.d(TAG, "AI Success: ${aiText.take(50)}...")
-                                    val newText = currentText.replaceFirst(Pattern.quote(fullMatchedString).toRegex(), aiText)
-                                    processAiResult(config, inputNode, currentText, newText, replaceWhole = true)
-                                }.onFailure {
-                                    Log.e(TAG, "AI Failure: ${it.message}")
-                                    overlayManager.showToast(it.message ?: "Unknown error")
-                                }
+                            executeAiCommand(config, inlinePromptTemplate, userPrompt, inputNode, currentText) { aiText ->
+                                // Replace only the matched inline command. A literal replacement (the
+                                // String overload) keeps dollar signs and backslashes in the answer
+                                // intact, unlike a regex replacement.
+                                currentText.replaceFirst(fullMatchedString, aiText)
                             }
                             return
                         }
@@ -406,24 +475,15 @@ class MyAccessibilityService : AccessibilityService() {
                         if (textToProcess.length > 1) {
                             val runnable = Runnable {
                                 if (!inputNode.refresh()) return@Runnable
+                                // Same text .undo restores: what the user wrote before the trigger.
                                 originalTextCache = textToProcess
                                 lastNode = inputNode
                                 undoCacheTimestamp = System.currentTimeMillis()
                                 if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
 
-                                overlayManager.showLoading(config)
-                                overlayManager.hideUndoButton() 
-
-                                performAICall(config, prompt, textToProcess) { result ->
-                                    overlayManager.hideLoading()
-                                    result.onSuccess { aiText ->
-                                        Log.d(TAG, "AI Success: ${aiText.take(50)}...")
-                                        val finalText = aiText + suffix
-                                        processAiResult(config, inputNode, null, finalText, replaceWhole = true)
-                                    }.onFailure {
-                                        Log.e(TAG, "AI Failure: ${it.message}")
-                                        overlayManager.showToast(it.message ?: "Unknown error")
-                                    }
+                                executeAiCommand(config, prompt, textToProcess, inputNode, textToProcess) { aiText ->
+                                    // Keep whatever the user wrote after the trigger.
+                                    aiText + suffix
                                 }
                             }
                             pendingTriggerRunnable = runnable
@@ -438,7 +498,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun processAiResult(config: AppConfig, node: AccessibilityNodeInfo, currentText: String?, aiText: String, replaceWhole: Boolean) {
+    private fun processAiResult(config: AppConfig, node: AccessibilityNodeInfo, aiText: String, render: (String) -> String) {
         val cleanedText = cleanAiText(aiText)
 
         if (cleanedText.isBlank()) {
@@ -453,13 +513,346 @@ class MyAccessibilityService : AccessibilityService() {
 
         if (wordCount > 15 && config.enablePreviewDialog) {
             overlayManager.showPreviewDialog(cleanedText, isDarkMode) {
-                pasteText(node, cleanedText)
+                pasteText(node, render(cleanedText), moveCursorToEnd = true)
                 overlayManager.showUndoButton(config)
+                showResultChipFor(config, node)
             }
         } else {
-            pasteText(node, cleanedText)
+            pasteText(node, render(cleanedText), moveCursorToEnd = true)
             overlayManager.showUndoButton(config)
+            showResultChipFor(config, node)
         }
+    }
+
+    /**
+     * Runs one AI command and writes the answer into [node] through [render], which receives the
+     * model text and returns the complete field content for the command that is running (a trailing
+     * trigger keeps the text that followed it, an inline command replaces only its own match, and a
+     * global rewrite replaces everything).
+     *
+     * Uses streaming when the provider supports it and the setting is on, and falls back to a single
+     * request otherwise.
+     */
+    private fun executeAiCommand(
+        config: AppConfig,
+        prompt: String,
+        userText: String,
+        node: AccessibilityNodeInfo?,
+        originalFieldText: String,
+        render: (String) -> String
+    ) {
+        lastCommand = PendingAiCommand(prompt, userText, render, originalFieldText)
+        overlayManager.showLoading(config)
+        overlayManager.hideUndoButton()
+        overlayManager.hideResultChip()
+
+        val provider = providerFor(config)
+        val generation = ++streamGeneration
+        val stream = if (config.streamResponses && node != null) {
+            try {
+                provider.streamResponse(
+                    prompt = prompt,
+                    userText = userText,
+                    config = config,
+                    onDelta = { delta -> onStreamDelta(generation, node, render, delta) },
+                    callback = { result ->
+                        onStreamFinished(generation, config, node, render, originalFieldText, result)
+                    }
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Streaming request could not be started: ${e.message}")
+                null
+            }
+        } else null
+
+        if (stream != null) {
+            activeStream = stream
+            activeStreamNode = node
+            activeStreamPreText = originalFieldText
+            streamDeltaCount = 0
+            streamThrottle.reset()
+            // Nothing to accept yet: while the answer is still arriving the chip is a Stop button.
+            if (config.showResultChip) {
+                overlayManager.showResultChip(
+                    config = config,
+                    anchor = node?.let { nodeBounds(it) },
+                    actions = listOf(OverlayManager.ChipAction("Stop") { cancelActiveStream(restoreOriginal = true) }),
+                    autoDismissMs = null
+                )
+            }
+            return
+        }
+
+        runNonStreamingCommand(config, prompt, userText, node, render)
+    }
+
+    private fun runNonStreamingCommand(
+        config: AppConfig,
+        prompt: String,
+        userText: String,
+        node: AccessibilityNodeInfo?,
+        render: (String) -> String
+    ) {
+        performAICall(config, prompt, userText) { result ->
+            uiHandler.post {
+                overlayManager.hideLoading()
+                result.onSuccess { aiText ->
+                    Log.d(TAG, "AI Success: ${aiText.take(50)}...")
+                    if (node != null && node.refresh()) {
+                        processAiResult(config, node, aiText, render)
+                    } else {
+                        overlayManager.showToast("The text field is no longer available")
+                    }
+                }.onFailure {
+                    Log.e(TAG, "AI Failure: ${it.message}")
+                    overlayManager.showToast(ApiErrorFormatter.explain(it))
+                }
+            }
+        }
+    }
+
+    private fun providerFor(config: AppConfig): AiProvider = when (config.provider) {
+        "cloudflare" -> cloudflareApiClient
+        "custom" -> customApiClient
+        "local" -> localLlmClient
+        else -> geminiApiClient
+    }
+
+    // --- Screen-aware commands ----------------------------------------------------------------
+
+    /**
+     * Handles the commands that read the screen: `.reply`, `.sum` and `.ta` when the prompt
+     * contains "@screen". Returns true when the text was consumed (the command ran, was refused, or
+     * the screen could not be read), false when the text should be handled as a normal command.
+     */
+    private fun maybeHandleScreenCommand(
+        config: AppConfig,
+        currentText: String,
+        inputNode: AccessibilityNodeInfo
+    ): Boolean {
+        val replyIndex = trailingCommandIndex(currentText, SCREEN_REPLY_TRIGGER, config)
+        val summaryIndex = trailingCommandIndex(currentText, SCREEN_SUMMARY_TRIGGER, config)
+        val askIndex = trailingCommandIndex(currentText, SCREEN_ASK_TRIGGER, config)
+        val asksAboutScreen = askIndex >= 0 && currentText.contains(SCREEN_ASK_MARKER, ignoreCase = true)
+
+        val instruction: String
+        val prompt: String
+        when {
+            replyIndex >= 0 -> {
+                instruction = currentText.substring(0, replyIndex).trim()
+                prompt = SCREEN_REPLY_PROMPT
+            }
+            summaryIndex >= 0 -> {
+                instruction = currentText.substring(0, summaryIndex).trim()
+                prompt = SCREEN_SUMMARY_PROMPT
+            }
+            asksAboutScreen -> {
+                instruction = currentText.substring(0, askIndex)
+                    .replace(SCREEN_ASK_MARKER, "", ignoreCase = true)
+                    .trim()
+                prompt = SCREEN_ANSWER_PROMPT
+            }
+            else -> return false
+        }
+
+        if (!config.screenContextEnabled) {
+            // Asking the screen a question must never be sent as literal text; the plain .reply and
+            // .sum shortcuts stay out of the way so a user-defined command with the same trigger
+            // keeps working.
+            if (asksAboutScreen) {
+                overlayManager.showToast("Screen context is off. Turn it on in Settings → Screen context.")
+                return true
+            }
+            return false
+        }
+
+        val reader = ScreenContextReader(this)
+        val foreground = reader.foregroundPackage()
+        if (ScreenTextExtractor.isPackageBlocked(config.screenContextBlockedPackages, foreground)) {
+            overlayManager.showToast("Screen reading is disabled for this app.")
+            return true
+        }
+
+        val screenContext = reader.readScreenContext(config)
+        if (screenContext.isNullOrBlank()) {
+            overlayManager.showToast("Could not read this screen")
+            return true
+        }
+
+        val userText = buildString {
+            append(screenContext)
+            if (instruction.isNotBlank()) {
+                append("\n\n")
+                append("Additional instruction: ")
+                append(instruction)
+            }
+        }
+
+        originalTextCache = currentText
+        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+        lastNode = inputNode
+        undoCacheTimestamp = System.currentTimeMillis()
+
+        // The answer replaces what the user typed, like every other command.
+        executeAiCommand(config, prompt, userText, inputNode, currentText) { aiText -> aiText }
+        return true
+    }
+
+    /** Index of a command typed at the end of the field, honouring the trigger settings. */
+    private fun trailingCommandIndex(text: String, command: String, config: AppConfig): Int =
+        findTriggerIndex(text, command, config.allowTriggerAnywhere, config.ignorePrecedingWhitespace)
+
+    // --- Streaming ---------------------------------------------------------------------------
+
+    private fun onStreamDelta(
+        generation: Int,
+        node: AccessibilityNodeInfo,
+        render: (String) -> String,
+        delta: String
+    ) {
+        if (generation != streamGeneration) return
+        streamDeltaCount++
+        streamBuffer.append(delta)
+        // ~10 updates per second is fast enough to look live and cheap enough not to fight the
+        // keyboard: the field is only rewritten when the throttle lets it through.
+        if (!streamThrottle.shouldEmit()) return
+        val partial = streamBuffer.toString()
+        uiHandler.post { applyStreamedText(node, render(partial)) }
+    }
+
+    private fun onStreamFinished(
+        generation: Int,
+        config: AppConfig,
+        node: AccessibilityNodeInfo,
+        render: (String) -> String,
+        originalFieldText: String,
+        result: Result<String>
+    ) {
+        uiHandler.post {
+            if (generation != streamGeneration) return@post // cancelled or replaced already
+            activeStream = null
+            activeStreamNode = null
+            activeStreamPreText = null
+            overlayManager.hideLoading()
+            overlayManager.hideResultChip()
+
+            result.onSuccess { fullText ->
+                streamBuffer.setLength(0)
+                if (node.refresh()) {
+                    processAiResult(config, node, fullText, render)
+                } else {
+                    overlayManager.showToast("The text field is no longer available")
+                }
+            }.onFailure { error ->
+                val streamedSomething = streamDeltaCount > 0
+                streamDeltaCount = 0
+                if (streamedSomething) {
+                    // Part of the answer was already visible: put the original text back and say why.
+                    restoreField(node, originalFieldText)
+                    Log.e(TAG, "Stream failed mid-answer: ${error.message}")
+                    overlayManager.showToast(ApiErrorFormatter.explain(error))
+                } else {
+                    // Nothing arrived, so the provider probably does not stream: ask normally.
+                    Log.d(TAG, "Streaming unavailable (${error.message}); falling back to a single request")
+                    runNonStreamingCommand(config, lastCommand?.prompt.orEmpty(), lastCommand?.userText.orEmpty(), node, render)
+                }
+            }
+        }
+    }
+
+    private fun applyStreamedText(node: AccessibilityNodeInfo, newText: String) {
+        try {
+            if (!node.refresh()) return
+            pasteText(node, newText, moveCursorToEnd = true)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not update the field mid-stream: ${e.message}")
+        }
+    }
+
+    /** Aborts the in-flight stream (if any) and optionally puts the original text back. */
+    private fun cancelActiveStream(restoreOriginal: Boolean, message: String? = null) {
+        val stream = activeStream ?: return
+        activeStream = null
+        val node = activeStreamNode
+        val original = activeStreamPreText
+        activeStreamNode = null
+        activeStreamPreText = null
+        streamDeltaCount = 0
+        streamGeneration++
+        try { stream.cancel() } catch (e: Exception) { /* already gone */ }
+        if (restoreOriginal && node != null && original != null) {
+            restoreField(node, original)
+        }
+        overlayManager.hideLoading()
+        overlayManager.hideResultChip()
+        if (message != null) overlayManager.showToast(message)
+    }
+
+    /** The user typed or moved to another field: stop streaming and hide the chip. */
+    private fun onUserInterruption() {
+        cancelActiveStream(restoreOriginal = true)
+        overlayManager.hideResultChip()
+    }
+
+    private fun restoreField(node: AccessibilityNodeInfo, text: String) {
+        try {
+            if (node.refresh()) pasteText(node, text, moveCursorToEnd = true)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not restore the original text: ${e.message}")
+        }
+    }
+
+    private fun showResultChipFor(config: AppConfig, node: AccessibilityNodeInfo) {
+        if (!config.showResultChip) return
+        overlayManager.showResultChip(
+            config = config,
+            anchor = nodeBounds(node),
+            actions = listOf(
+                OverlayManager.ChipAction("Accept") { overlayManager.hideResultChip() },
+                OverlayManager.ChipAction("Reject") {
+                    overlayManager.hideResultChip()
+                    performUndo()
+                },
+                OverlayManager.ChipAction("Retry") {
+                    overlayManager.hideResultChip()
+                    retryLastCommand(config)
+                }
+            )
+        )
+    }
+
+    /** Re-runs the command that produced the current result, from the original text. */
+    private fun retryLastCommand(config: AppConfig) {
+        val command = lastCommand ?: return
+        val node = lastNode?.takeIf { it.refresh() }
+            ?: rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            ?: return
+        originalTextCache = command.originalFieldText
+        lastNode = node
+        undoCacheTimestamp = System.currentTimeMillis()
+        executeAiCommand(config, command.prompt, command.userText, node, command.originalFieldText, command.render)
+    }
+
+    private fun nodeBounds(node: AccessibilityNodeInfo): android.graphics.Rect? {
+        return try {
+            val rect = android.graphics.Rect()
+            node.getBoundsInScreen(rect)
+            rect
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** True when the text is exactly what we last wrote ourselves, so it must not be re-processed. */
+    private fun isOwnEcho(text: String): Boolean {
+        val last = lastAppliedText ?: return false
+        if (text != last) return false
+        return System.currentTimeMillis() - lastAppliedAt < ECHO_WINDOW_MS
+    }
+
+    private fun performAICall(config: AppConfig, prompt: String, userText: String, callback: (Result<String>) -> Unit) {
+        Log.d(TAG, "Performing AI Call: Provider=${config.provider}, Timeout=${config.apiTimeoutSeconds}s")
+        providerFor(config).generateResponse(prompt, userText, config, callback)
     }
 
     private fun cleanAiText(text: String): String {
@@ -477,17 +870,6 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         return result
-    }
-
-    private fun performAICall(config: AppConfig, prompt: String, userText: String, callback: (Result<String>) -> Unit) {
-        Log.d(TAG, "Performing AI Call: Provider=${config.provider}, Timeout=${config.apiTimeoutSeconds}s")
-        val provider: AiProvider = when (config.provider) {
-            "cloudflare" -> cloudflareApiClient
-            "custom" -> customApiClient
-            "local" -> localLlmClient
-            else -> geminiApiClient
-        }
-        provider.generateResponse(prompt, userText, config, callback)
     }
 
     private fun findTriggerIndex(text: String, trigger: String, allowAnywhere: Boolean, ignoreWhitespace: Boolean): Int {
@@ -522,10 +904,22 @@ class MyAccessibilityService : AccessibilityService() {
         overlayManager.hideUndoButton()
     }
 
-    private fun pasteText(node: AccessibilityNodeInfo, text: String) {
+    private fun pasteText(node: AccessibilityNodeInfo, text: String, moveCursorToEnd: Boolean = false) {
         val arguments = Bundle()
         arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+
+        // Remember what we wrote so the text-changed event it triggers is recognised as our own
+        // echo instead of the user typing (which would cancel a stream or hide the chip).
+        lastAppliedText = text
+        lastAppliedAt = System.currentTimeMillis()
+
+        if (moveCursorToEnd && text.isNotEmpty()) {
+            val selection = Bundle()
+            selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, text.length)
+            selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, text.length)
+            try { node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection) } catch (e: Exception) { }
+        }
     }
 
     private fun buildRegexFromInlinePattern(inlinePattern: String): String {
@@ -560,7 +954,10 @@ class MyAccessibilityService : AccessibilityService() {
         return "(?s)(.*)" + Pattern.quote(parts[0]) + "(.+?)" + Pattern.quote(parts[1]) + "\\s*$"
     }
 
-    override fun onInterrupt() { overlayManager.hideAll() }
+    override fun onInterrupt() {
+        cancelActiveStream(restoreOriginal = false)
+        overlayManager.hideAll()
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
@@ -568,6 +965,7 @@ class MyAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        cancelActiveStream(restoreOriginal = false)
         unloadModel()
         if (::overlayManager.isInitialized) {
             overlayManager.hideAll()

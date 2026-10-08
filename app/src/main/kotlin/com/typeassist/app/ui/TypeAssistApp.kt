@@ -33,8 +33,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.LoadingIndicatorStyle
+import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.createDefaultConfig
+import com.typeassist.app.data.mergeDuplicateProfiles
 import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.ui.screens.*
 import okhttp3.OkHttpClient
@@ -44,6 +47,20 @@ private data class AppDestination(
     val label: String,
     val icon: ImageVector
 )
+
+/**
+ * Brings a config up to the current shape: applies pending migrations, drops duplicate saved
+ * profiles (one row per endpoint + key) and duplicate model history entries.
+ * Returns the same instance when nothing had to change, so callers can detect it cheaply.
+ */
+private fun cleanConfig(config: AppConfig): AppConfig {
+    val migrated = ConfigMigrations.apply(config)
+    val sanitizedPreferences = ModelSelectionPreferences.sanitize(migrated.modelPreferences)
+    val withPreferences =
+        if (sanitizedPreferences == migrated.modelPreferences) migrated
+        else migrated.copy(modelPreferences = sanitizedPreferences)
+    return mergeDuplicateProfiles(withPreferences)
+}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -77,7 +94,7 @@ fun TypeAssistApp(
             if (json != null) {
                 val loadedConfig = gson.fromJson(json, AppConfig::class.java)
                 // Handle missing fields from older versions
-                LoadingIndicatorStyle.sanitize(loadedConfig)
+                ConfigMigrations.apply(LoadingIndicatorStyle.sanitize(loadedConfig))
                 if (loadedConfig.savedCustomConfigs == null) loadedConfig.savedCustomConfigs = mutableListOf()
                 if (loadedConfig.savedGeminiConfigs == null) loadedConfig.savedGeminiConfigs = mutableListOf()
                 if (loadedConfig.savedCloudflareConfigs == null) loadedConfig.savedCloudflareConfigs = mutableListOf()
@@ -101,14 +118,21 @@ fun TypeAssistApp(
                         snippet.content = ""
                     }
                 }
-                loadedConfig
+                // Migration: drop duplicate saved profiles / model history from older configs,
+                // and persist the cleaned config so the duplicates stay gone.
+                val cleanedConfig = cleanConfig(loadedConfig)
+                if (cleanedConfig !== loadedConfig) {
+                    prefs.edit().putString("config_json", gson.toJson(cleanedConfig)).apply()
+                }
+                cleanedConfig
             } else createDefaultConfig()
         } catch (e: Exception) { createDefaultConfig() })
     }
 
     fun saveConfig(newConfig: AppConfig) {
-        config = newConfig
-        prefs.edit().putString("config_json", gson.toJson(newConfig)).apply()
+        val cleaned = cleanConfig(newConfig)
+        config = cleaned
+        prefs.edit().putString("config_json", gson.toJson(cleaned)).apply()
     }
 
     // Custom navigate function to track previous screen

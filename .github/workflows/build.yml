@@ -35,8 +35,46 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          ./gradlew test --stacktrace 2>&1 | tee test.log
+
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: |
+            test.log
+            app/build/reports/tests
+          if-no-files-found: warn
+
+      - name: Report unit test summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          totals = {}
+          for path in sorted(glob.glob("app/build/test-results/*/*.xml")):
+              variant = path.split("/")[2]
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception:
+                  continue
+              entry = totals.setdefault(variant, [0, 0, 0, 0])
+              entry[0] += int(root.get("tests") or 0)
+              entry[1] += int(root.get("failures") or 0)
+              entry[2] += int(root.get("errors") or 0)
+              entry[3] += int(root.get("skipped") or 0)
+          for variant, (tests, failures, errors, skipped) in sorted(totals.items()):
+              print(f"::notice::{variant}: {tests} tests, {failures} failures, {errors} errors, {skipped} skipped")
+          PY
+
       - name: Build Full release variant
-        run: ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
+        run: |
+          set -o pipefail
+          ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
 
       - name: Upload build log
         if: always()
@@ -53,3 +91,23 @@ jobs:
           name: PromptAI-Full-unsigned
           path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
           if-no-files-found: error
+
+      # Prints the interesting part of the Gradle output as annotations, so a failed
+      # build points at the actual compile error instead of a missing artifact.
+      # (GitHub keeps about ten annotations, so only the most useful lines are emitted.)
+      - name: Report build errors
+        if: failure()
+        run: |
+          set +e
+          for log in test.log build.log; do
+            if [ ! -f "$log" ]; then echo "::error::$log was not produced"; continue; fi
+            {
+              grep -E "^e: |^w: .*never used|FAILURE:|What went wrong|Execution failed|FAILED$|[0-9]+ tests? completed" "$log" | head -8
+              if [ -z "$(grep -E '^e: |FAILURE:' "$log" | head -1)" ]; then
+                echo "(no compile errors found, showing the end of the log)"
+                tail -8 "$log"
+              fi
+            } | sed -e 's/%/%25/g' -e 's/\r//g' | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          done
