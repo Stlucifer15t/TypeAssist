@@ -73,20 +73,20 @@ jobs:
 
       # Prints the interesting part of the Gradle output as annotations, so a failed
       # build points at the actual compile error instead of a missing artifact.
+      # (GitHub keeps about ten annotations, so only the most useful lines are emitted.)
       - name: Report build errors
         if: failure()
         run: |
-          {
-            echo "=== apk files ==="
-            find app/build/outputs/apk -type f -name "*.apk" 2>/dev/null
-            for log in test.log build.log; do
-              if [ ! -f "$log" ]; then continue; fi
-              echo "=== $log: errors ==="
-              grep -E "^e: |FAILURE:|What went wrong|Execution failed|FAILED$|[0-9]+ tests? completed" "$log" | head -30
-              echo "=== $log: tail ==="
-              tail -8 "$log"
+          set +e
+          for log in test.log build.log; do
+            if [ ! -f "$log" ]; then echo "::error::$log was not produced"; continue; fi
+            {
+              grep -E "^e: |^w: .*never used|FAILURE:|What went wrong|Execution failed|FAILED$|[0-9]+ tests? completed" "$log" | head -8
+              if [ -z "$(grep -E '^e: |FAILURE:' "$log" | head -1)" ]; then
+                echo "(no compile errors found, showing the end of the log)"
+                tail -8 "$log"
+              fi
+            } | sed -e 's/%/%25/g' -e 's/\r//g' | while IFS= read -r line; do
+              echo "::error::$line"
             done
-          } > diag.txt 2>&1
-          while IFS= read -r line; do
-            echo "::error::${line//%/\\%25}"
-          done < diag.txt
+          done
