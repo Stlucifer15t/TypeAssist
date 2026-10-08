@@ -196,9 +196,12 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         // The focused field changed: the chip no longer refers to what the user is looking at, and
-        // an in-flight stream must not keep writing into a field that lost focus.
+        // an in-flight stream must not keep writing into a field that lost focus. Focus events that
+        // immediately follow our own edit (same text) are ignored, so writing a result cannot
+        // dismiss the chip it just showed.
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
-            onUserInterruption()
+            val focusedText = try { event.source?.text?.toString() } catch (e: Exception) { null }
+            if (!isOwnEcho(focusedText.orEmpty())) onUserInterruption()
             return
         }
 
