@@ -50,6 +50,27 @@ jobs:
             app/build/reports/tests
           if-no-files-found: warn
 
+      - name: Report unit test summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          totals = {}
+          for path in sorted(glob.glob("app/build/test-results/*/*.xml")):
+              variant = path.split("/")[2]
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception:
+                  continue
+              entry = totals.setdefault(variant, [0, 0, 0, 0])
+              entry[0] += int(root.get("tests") or 0)
+              entry[1] += int(root.get("failures") or 0)
+              entry[2] += int(root.get("errors") or 0)
+              entry[3] += int(root.get("skipped") or 0)
+          for variant, (tests, failures, errors, skipped) in sorted(totals.items()):
+              print(f"::notice::{variant}: {tests} tests, {failures} failures, {errors} errors, {skipped} skipped")
+          PY
+
       - name: Build Full release variant
         run: |
           set -o pipefail
