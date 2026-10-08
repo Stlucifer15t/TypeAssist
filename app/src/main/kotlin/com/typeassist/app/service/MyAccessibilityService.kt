@@ -58,10 +58,15 @@ class MyAccessibilityService : AccessibilityService() {
         private const val SCREEN_ASK_MARKER = "@screen"
 
         private const val SCREEN_REPLY_PROMPT =
-            "You are drafting a reply in an ongoing conversation. The visible screen text is provided, " +
-                "labelled with who wrote each part when it could be detected. Write only the reply " +
-                "message, in the user's own voice, matching the conversation's language, tone and " +
-                "context. Do not add quotes, labels or explanations."
+            "You are drafting a reply in an ongoing conversation for the user. The screen text is " +
+                "provided. Lines starting with Me: were written by the user, and lines starting with " +
+                "Them: were written by the other person. Copy the user's own writing style from the " +
+                "Me: lines: their language, vocabulary, sentence length, punctuation, capitalisation, " +
+                "emoji use and formality. If there are no Me: lines, keep the reply short and plain and " +
+                "match the conversation's language and tone. Do not use exaggerated, flowery or robotic " +
+                "phrasing (for example \"I hope this finds you well\", \"absolutely delighted\" or " +
+                "\"delve into\"), and do not over-explain. Write only the reply message, with no quotes, " +
+                "labels or explanations."
 
         private const val SCREEN_SUMMARY_PROMPT =
             "Summarize the content on the screen into a few short bullet points. Keep only the " +
@@ -528,12 +533,12 @@ class MyAccessibilityService : AccessibilityService() {
             overlayManager.showPreviewDialog(cleanedText, overlayThemeMode()) {
                 pasteText(node, render(cleanedText), moveCursorToEnd = true)
                 overlayManager.showUndoButton(config)
-                showResultChipFor(config, node)
+                showResultChipFor(config)
             }
         } else {
             pasteText(node, render(cleanedText), moveCursorToEnd = true)
             overlayManager.showUndoButton(config)
-            showResultChipFor(config, node)
+            showResultChipFor(config)
         }
     }
 
@@ -588,7 +593,6 @@ class MyAccessibilityService : AccessibilityService() {
             if (config.showResultChip) {
                 overlayManager.showResultChip(
                     config = config,
-                    anchor = node?.let { nodeBounds(it) },
                     actions = listOf(OverlayManager.ChipAction("Stop") { cancelActiveStream(restoreOriginal = true) }),
                     themeMode = overlayThemeMode(),
                     autoDismissMs = null
@@ -816,11 +820,10 @@ class MyAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun showResultChipFor(config: AppConfig, node: AccessibilityNodeInfo) {
+    private fun showResultChipFor(config: AppConfig) {
         if (!config.showResultChip) return
         overlayManager.showResultChip(
             config = config,
-            anchor = nodeBounds(node),
             actions = listOf(
                 OverlayManager.ChipAction("Accept") { overlayManager.hideResultChip() },
                 OverlayManager.ChipAction("Reject") {
@@ -846,16 +849,6 @@ class MyAccessibilityService : AccessibilityService() {
         lastNode = node
         undoCacheTimestamp = System.currentTimeMillis()
         executeAiCommand(config, command.prompt, command.userText, node, command.originalFieldText, command.render)
-    }
-
-    private fun nodeBounds(node: AccessibilityNodeInfo): android.graphics.Rect? {
-        return try {
-            val rect = android.graphics.Rect()
-            node.getBoundsInScreen(rect)
-            rect
-        } catch (e: Exception) {
-            null
-        }
     }
 
     /** True when the text is exactly what we last wrote ourselves, so it must not be re-processed. */

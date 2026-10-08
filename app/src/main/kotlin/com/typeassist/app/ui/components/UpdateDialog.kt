@@ -41,6 +41,8 @@ fun VersionAnnouncementDialog(versionName: String, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Here’s what’s new:", fontWeight = FontWeight.SemiBold)
+                Text("• The Accept · Reject · Retry chip now appears in the middle of the screen, where the keyboard is less likely to cover it.")
+                Text("• .reply copies your writing style from the messages marked Me: and avoids stiff or exaggerated wording.")
                 Text("• Dark and AMOLED black look different now. Dark is a lighter dark grey, and AMOLED is true black with near-black cards.")
                 Text("• Floating chips, the preview card and the snippet picker follow the Appearance you pick in Settings, not only your phone’s night mode.")
                 Text("• The Appearance list shows a small colour preview for each theme.")

@@ -98,7 +98,7 @@ Type a shortcut straight into any text field — Prompt AI detects it after a sh
 | `(.c: 25 * 4 + 10)` | Offline calculator (`+ - * / ^ ( ) sqrt sin cos tan log`) | → `110` |
 | `.now` / `.date` | Insert the current time / date | → `2026-10-07 14:30` |
 | `.pass` | Generate a strong random password | → `t7#Kq2!mVs9x` |
-| `.reply` | Draft a reply to the conversation on screen (needs screen context) | `Sounds good, see you then .reply` |
+| `.reply` | Draft a reply to the conversation on screen, in your own writing style (needs screen context) | `Sounds good, see you then .reply` |
 | `.sum` | Summarize what is on screen (needs screen context) | `.sum` |
 | `.ta` + `@screen` | Ask a question about what is on screen | `What does this error mean? @screen .ta` |
 | `.undo` | Revert the last change (5-minute window) | |
@@ -107,7 +107,7 @@ By default a trigger must sit at the end of the text. In **Settings → General 
 
 Custom commands and inline patterns are created in the **Commands** tab; every command is `%`-based, where `%` is replaced with your text.
 
-**After a command runs**, a small **Accept · Reject · Retry** chip floats next to the field for a few seconds: Accept keeps the result, Reject puts your original text back (the same thing `.undo` does), and Retry runs the command again. The chip never takes focus from what you are typing, and it disappears as soon as you type or move to another field. Turn it off in **Settings → General → Replies**.
+**After a command runs**, a small **Accept · Reject · Retry** chip appears in the middle of the screen for a few seconds, where the keyboard is less likely to cover it: Accept keeps the result, Reject puts your original text back (the same thing `.undo` does), and Retry runs the command again. The chip never takes focus from what you are typing, and it disappears as soon as you type or move to another field. Turn it off in **Settings → General → Replies**.
 
 **Answers stream in as they are written** with Gemini and OpenAI-compatible providers, so the text appears in the field while the model is still typing; Cloudflare and local models answer in one piece. While a stream is running the chip is a **Stop** button that cancels the request and restores your text. Streaming is on by default and can be turned off in **Settings → General → Replies**.
 
@@ -159,7 +159,7 @@ The installed version shows a short **release announcement once**, on the first 
 *   **No middleman.** Prompt AI has no proxy server; requests go straight from your device to the provider you configured.
 *   **On demand.** The Accessibility Service watches editable-field text only to find commands. Text is sent to an AI provider **only when you invoke an AI command** — nothing is sent while you type normally.
 *   **Nothing runs when paused.** The assistant switch on the Home screen disables processing entirely.
-*   **Screen context is opt-in.** `.reply`, `.sum` and `.ta` with `@screen` send the visible text of the current screen to your AI provider — and only those commands do. Screen reading is off until you enable it in **Settings → General → Screen context**, never happens in the background, and is skipped entirely in the apps on your blocklist (banking, payment and password-manager packages are preloaded).
+*   **Screen context is opt-in.** `.reply`, `.sum` and `.ta` with `@screen` send the visible text of the current screen to your AI provider — and only those commands do. Screen reading is off until you enable it in **Settings → General → Screen context**, never happens in the background, and is skipped entirely in the apps on your blocklist (banking, payment and password-manager packages are preloaded). For `.reply`, messages on the right side of the screen count as yours (marked `Me:`), and the reply copies your style from them.
 *   **Local storage.** API keys and settings live in the app's private preferences. Saved profile rows mask keys, and the raw-JSON editor warns that it contains them.
 *   **Short-lived history.** Processed text is kept in memory for five minutes only, and can be cleared at any time.
 *   **Offline option.** With the Local LLM provider, your text never leaves the device.

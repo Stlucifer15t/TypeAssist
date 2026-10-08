@@ -386,25 +386,24 @@ class OverlayManager(private val context: Context) {
     data class ChipAction(val label: String, val onClick: () -> Unit)
 
     private var resultChipView: LinearLayout? = null
-    private var resultChipParams: WindowManager.LayoutParams? = null
 
     private val hideResultChipRunnable = Runnable { hideResultChip() }
 
     /**
-     * Small floating chip shown next to the field after a command replaced its text.
+     * Small floating chip shown in the middle of the screen after a command replaced its text.
+     *
+     * It is centred instead of sitting under the edited field, because the keyboard covered the
+     * field-anchored chip.
      *
      * The window is [WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE], so tapping it never takes
      * focus away from the text field (the keyboard and cursor stay where they were).
      *
-     * @param anchor bounds of the edited field, used to place the chip underneath it (or above it
-     *   when there is no room below).
      * @param themeMode the resolved theme (light, dark or amoled) the chip is drawn in.
      * @param autoDismissMs how long the chip stays before it hides itself; `null` keeps it visible
      *   until the caller hides it (used while a stream is still running).
      */
     fun showResultChip(
         config: AppConfig,
-        anchor: android.graphics.Rect?,
         actions: List<ChipAction>,
         themeMode: String,
         autoDismissMs: Long? = RESULT_CHIP_TIMEOUT_MS
@@ -446,6 +445,7 @@ class OverlayManager(private val context: Context) {
                 })
             }
 
+            // Centred on screen. The field-anchored position let the keyboard cover the chip.
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -454,19 +454,14 @@ class OverlayManager(private val context: Context) {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT
             ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = anchor?.left ?: 0
-                y = anchor?.bottom ?: 0
+                gravity = Gravity.CENTER
             }
 
             resultChipView = card
-            resultChipParams = params
             try {
                 windowManager?.addView(card, params)
-                card.post { positionResultChip(card, params, anchor) }
             } catch (e: Exception) {
                 resultChipView = null
-                resultChipParams = null
                 return@post
             }
             if (autoDismissMs != null) {
@@ -483,36 +478,9 @@ class OverlayManager(private val context: Context) {
     private fun hideResultChipInternal() {
         val view = resultChipView
         resultChipView = null
-        resultChipParams = null
         if (view != null) {
             try { windowManager?.removeView(view) } catch (e: Exception) {}
         }
-    }
-
-    /** Keeps the chip on screen: under the field when it fits, above it otherwise. */
-    private fun positionResultChip(
-        view: View,
-        params: WindowManager.LayoutParams,
-        anchor: android.graphics.Rect?
-    ) {
-        val metrics = context.resources.displayMetrics
-        val margin = dpF(10f).toInt()
-        val width = view.width.takeIf { it > 0 } ?: return
-        val height = view.height
-
-        val centerX = anchor?.centerX() ?: (metrics.widthPixels / 2)
-        var x = centerX - width / 2
-        var y = (anchor?.bottom ?: (metrics.heightPixels / 2)) + margin
-        if (anchor != null && y + height > metrics.heightPixels - margin) {
-            y = anchor.top - height - margin
-        }
-
-        x = x.coerceIn(margin, (metrics.widthPixels - width - margin).coerceAtLeast(margin))
-        y = y.coerceIn(margin, (metrics.heightPixels - height - margin).coerceAtLeast(margin))
-
-        params.x = x
-        params.y = y
-        try { windowManager?.updateViewLayout(view, params) } catch (e: Exception) {}
     }
 
     private fun actionColor(label: String, colors: OverlayColors): Int = when (label.lowercase()) {

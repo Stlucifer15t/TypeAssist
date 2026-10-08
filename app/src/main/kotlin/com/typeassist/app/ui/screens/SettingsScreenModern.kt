@@ -462,7 +462,7 @@ private fun GeneralSettingsTabModern(
     ) {
         ModernSwitchRow(
             title = "Show accept/reject chip",
-            description = "A small Accept · Reject · Retry chip floats next to the field for a few seconds.",
+            description = "A small Accept · Reject · Retry chip appears in the middle of the screen for a few seconds.",
             checked = showResultChip
         ) {
             showResultChip = it
@@ -1190,7 +1190,7 @@ private fun ScreenContextSettingsSection(
 
     ModernSettingsSection(
         title = "Screen context",
-        description = "Commands that read what is on your screen: .reply, .sum and .ta with @screen."
+        description = "Commands that read what is on your screen: .reply, .sum and .ta with @screen. For .reply, your own messages (marked Me:) set the writing style."
     ) {
         ModernSwitchRow(
             title = "Allow screen context",
