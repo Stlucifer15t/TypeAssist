@@ -78,12 +78,15 @@ jobs:
         run: |
           {
             echo "=== apk files ==="
-            find app/build/outputs/apk -type f -name "*.apk" 2>/dev/null || echo "(none)"
-            echo "=== gradle test result ==="
-            grep -E "^(e: |w: )|FAILURE:|What went wrong|Execution failed|BUILD SUCCESSFUL|BUILD FAILED" build.log 2>/dev/null | head -25 || echo "(no build.log)"
-            echo "=== build.log tail ==="
-            tail -12 build.log 2>/dev/null || true
-          } > diag.txt
+            find app/build/outputs/apk -type f -name "*.apk" 2>/dev/null
+            for log in test.log build.log; do
+              if [ ! -f "$log" ]; then continue; fi
+              echo "=== $log: errors ==="
+              grep -E "^e: |FAILURE:|What went wrong|Execution failed|FAILED$|[0-9]+ tests? completed" "$log" | head -30
+              echo "=== $log: tail ==="
+              tail -8 "$log"
+            done
+          } > diag.txt 2>&1
           while IFS= read -r line; do
-            echo "::error::${line//%/\%25}"
+            echo "::error::${line//%/\\%25}"
           done < diag.txt
