@@ -243,6 +243,7 @@ private fun GeneralSettingsTabModern(
     var globalTriggerPattern by remember(config.globalTriggerPattern) { mutableStateOf(config.globalTriggerPattern) }
     var historyEnabled by remember(config.isHistoryEnabled) { mutableStateOf(config.isHistoryEnabled) }
     var previewEnabled by remember(config.enablePreviewDialog) { mutableStateOf(config.enablePreviewDialog) }
+    var showResultChip by remember(config.showResultChip) { mutableStateOf(config.showResultChip) }
     var timeout by remember(config.apiTimeoutSeconds) { mutableStateOf(config.apiTimeoutSeconds.toFloat()) }
     var checkingForUpdate by remember { mutableStateOf(false) }
 
@@ -447,6 +448,20 @@ private fun GeneralSettingsTabModern(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+
+    ModernSettingsSection(
+        title = "Replies",
+        description = "Choose what happens right after a command replaces your text."
+    ) {
+        ModernSwitchRow(
+            title = "Show accept/reject chip",
+            description = "A small Accept · Reject · Retry chip floats next to the field for a few seconds.",
+            checked = showResultChip
+        ) {
+            showResultChip = it
+            onSave(config.copy(showResultChip = it))
         }
     }
 

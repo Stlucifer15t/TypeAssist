@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.google.gson.GsonBuilder
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.createDefaultConfig
@@ -48,14 +49,16 @@ private data class AppDestination(
 )
 
 /**
- * Drops duplicate saved profiles (one row per endpoint + key) and duplicate model history entries.
+ * Brings a config up to the current shape: applies pending migrations, drops duplicate saved
+ * profiles (one row per endpoint + key) and duplicate model history entries.
  * Returns the same instance when nothing had to change, so callers can detect it cheaply.
  */
 private fun cleanConfig(config: AppConfig): AppConfig {
-    val sanitizedPreferences = ModelSelectionPreferences.sanitize(config.modelPreferences)
+    val migrated = ConfigMigrations.apply(config)
+    val sanitizedPreferences = ModelSelectionPreferences.sanitize(migrated.modelPreferences)
     val withPreferences =
-        if (sanitizedPreferences == config.modelPreferences) config
-        else config.copy(modelPreferences = sanitizedPreferences)
+        if (sanitizedPreferences == migrated.modelPreferences) migrated
+        else migrated.copy(modelPreferences = sanitizedPreferences)
     return mergeDuplicateProfiles(withPreferences)
 }
 
@@ -91,7 +94,7 @@ fun TypeAssistApp(
             if (json != null) {
                 val loadedConfig = gson.fromJson(json, AppConfig::class.java)
                 // Handle missing fields from older versions
-                LoadingIndicatorStyle.sanitize(loadedConfig)
+                ConfigMigrations.apply(LoadingIndicatorStyle.sanitize(loadedConfig))
                 if (loadedConfig.savedCustomConfigs == null) loadedConfig.savedCustomConfigs = mutableListOf()
                 if (loadedConfig.savedGeminiConfigs == null) loadedConfig.savedGeminiConfigs = mutableListOf()
                 if (loadedConfig.savedCloudflareConfigs == null) loadedConfig.savedCloudflareConfigs = mutableListOf()

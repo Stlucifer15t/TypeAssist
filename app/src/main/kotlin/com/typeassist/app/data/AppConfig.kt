@@ -33,7 +33,14 @@ data class AppConfig(
     var enablePreviewDialog: Boolean = false,
     var allowTriggerAnywhere: Boolean = false,
     var ignorePrecedingWhitespace: Boolean = false,
-    var apiTimeoutSeconds: Long = 30L
+    var apiTimeoutSeconds: Long = 30L,
+    // --- Added in config version 2 (see ConfigMigrations) ---
+    var configVersion: Int = CURRENT_CONFIG_VERSION,
+    var showResultChip: Boolean = true,
+    var streamResponses: Boolean = true,
+    var screenContextEnabled: Boolean = false,
+    var screenContextChatLabels: Boolean = true,
+    var screenContextBlockedPackages: MutableList<String> = defaultBlockedScreenPackages()
 ) : Serializable
 
 data class CloudflareConfig(
@@ -208,6 +215,12 @@ fun createDefaultConfig(): AppConfig {
         enablePreviewDialog = false,
         allowTriggerAnywhere = false,
         ignorePrecedingWhitespace = false,
-        apiTimeoutSeconds = 30L
+        apiTimeoutSeconds = 30L,
+        configVersion = CURRENT_CONFIG_VERSION,
+        showResultChip = true,
+        streamResponses = true,
+        screenContextEnabled = false,
+        screenContextChatLabels = true,
+        screenContextBlockedPackages = defaultBlockedScreenPackages()
     )
 }

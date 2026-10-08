@@ -35,6 +35,19 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Run unit tests
+        run: ./gradlew test --stacktrace 2>&1 | tee test.log
+
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: |
+            test.log
+            app/build/reports/tests
+          if-no-files-found: warn
+
       - name: Build Full release variant
         run: ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
 
