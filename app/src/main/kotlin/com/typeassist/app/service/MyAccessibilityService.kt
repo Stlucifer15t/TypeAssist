@@ -448,9 +448,10 @@ class MyAccessibilityService : AccessibilityService() {
                             undoCacheTimestamp = System.currentTimeMillis()
 
                             executeAiCommand(config, inlinePromptTemplate, userPrompt, inputNode, currentText) { aiText ->
-                                // Replace only the matched inline command; a literal replacement keeps
-                                // dollar signs and backslashes in the answer intact.
-                                currentText.replaceFirst(Pattern.quote(fullMatchedString).toRegex()) { _ -> aiText }
+                                // Replace only the matched inline command. A literal replacement (the
+                                // String overload) keeps dollar signs and backslashes in the answer
+                                // intact, unlike a regex replacement.
+                                currentText.replaceFirst(fullMatchedString, aiText)
                             }
                             return
                         }
