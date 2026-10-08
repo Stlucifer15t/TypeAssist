@@ -132,11 +132,14 @@ Back returns to Home; from the Command gallery it returns to Commands.
 
 ## 🎨 Themes and indicators
 
-**Appearance** (Settings → General) offers four Material 3 themes:
+**Appearance** (Settings → General) offers four Material 3 themes. Each choice shows a small colour preview.
 
 *   **System** — follow the device setting.
-*   **Light** and **Dark** — fixed palettes.
-*   **AMOLED black** — true-black background that saves power on OLED screens.
+*   **Light** — light grey background with white surfaces.
+*   **Dark** — dark grey background with lighter raised surfaces.
+*   **AMOLED black** — true-black background with near-black cards, which saves power on OLED screens.
+
+The floating chip, preview card and snippet picker use the theme you pick here. With **System**, they follow the device setting.
 
 The installed version shows a short **release announcement once**, on the first launch after an update.
 

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -110,6 +111,8 @@ import com.typeassist.app.data.SavedGeminiConfig
 import com.typeassist.app.data.identityKey
 import com.typeassist.app.data.repository.UpdateRepository
 import com.typeassist.app.ui.AppThemeMode
+import com.typeassist.app.ui.ThemePalettes
+import com.typeassist.app.ui.SurfacePalette
 import com.typeassist.app.ui.components.PageHeading
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -267,8 +270,8 @@ private fun GeneralSettingsTabModern(
         listOf(
             Triple(AppThemeMode.SYSTEM, "System", "Follow your device appearance."),
             Triple(AppThemeMode.LIGHT, "Light", "Use the light palette."),
-            Triple(AppThemeMode.DARK, "Dark", "Use the dark palette."),
-            Triple(AppThemeMode.AMOLED, "AMOLED black", "Use true black backgrounds with raised dark surfaces.")
+            Triple(AppThemeMode.DARK, "Dark", "Dark grey background with raised surfaces."),
+            Triple(AppThemeMode.AMOLED, "AMOLED black", "True black background with near-black cards.")
         ).forEach { (mode, title, description) ->
             Row(
                 modifier = Modifier
@@ -286,6 +289,7 @@ private fun GeneralSettingsTabModern(
                     Text(title, fontWeight = FontWeight.SemiBold)
                     Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                ThemeSwatch(mode)
             }
         }
     }
@@ -1365,6 +1369,43 @@ private fun ModernActionRow(
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(actionLabel, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * A small preview of an Appearance choice: the theme's background with a raised card on top.
+ * System shows the Light and Dark halves side by side. The colours come from the same palettes
+ * the app theme uses, so the preview cannot drift from what is actually drawn.
+ */
+@Composable
+private fun ThemeSwatch(mode: String) {
+    val palettes: List<SurfacePalette> = if (mode == AppThemeMode.SYSTEM) {
+        listOf(ThemePalettes.surfacesFor(AppThemeMode.LIGHT), ThemePalettes.surfacesFor(AppThemeMode.DARK))
+    } else {
+        listOf(ThemePalettes.surfacesFor(mode))
+    }
+    Row(
+        modifier = Modifier
+            .size(width = 56.dp, height = 36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+    ) {
+        palettes.forEach { palette ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(Color(palette.background))
+                    .padding(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(palette.surfaceContainerHigh))
+                )
+            }
+        }
     }
 }
 

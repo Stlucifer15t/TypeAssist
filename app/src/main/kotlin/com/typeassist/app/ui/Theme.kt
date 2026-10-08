@@ -2,6 +2,7 @@ package com.typeassist.app.ui
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
@@ -14,7 +15,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 
-private val LightColorScheme = lightColorScheme(
+// Accent colours are defined here; every surface role comes from ThemePalettes, so that all of
+// Light, Dark and AMOLED set the full surface-container family explicitly.
+
+private fun lightScheme(surfaces: SurfacePalette): ColorScheme = lightColorScheme(
     primary = Color(0xFF4F46D8),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFE8E7FF),
@@ -27,21 +31,28 @@ private val LightColorScheme = lightColorScheme(
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFFE3D8),
     onTertiaryContainer = Color(0xFF51210F),
-    background = Color(0xFFF6F7FB),
-    onBackground = Color(0xFF191B25),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF191B25),
-    surfaceVariant = Color(0xFFEEF0F6),
-    onSurfaceVariant = Color(0xFF626574),
-    outline = Color(0xFF85889A),
-    outlineVariant = Color(0xFFD8DAE4),
     error = Color(0xFFB3261E),
     onError = Color.White,
     errorContainer = Color(0xFFF9DEDC),
-    onErrorContainer = Color(0xFF410E0B)
+    onErrorContainer = Color(0xFF410E0B),
+    background = Color(surfaces.background),
+    onBackground = Color(surfaces.onBackground),
+    surface = Color(surfaces.surface),
+    onSurface = Color(surfaces.onSurface),
+    surfaceVariant = Color(surfaces.surfaceVariant),
+    onSurfaceVariant = Color(surfaces.onSurfaceVariant),
+    outline = Color(surfaces.outline),
+    outlineVariant = Color(surfaces.outlineVariant),
+    surfaceDim = Color(surfaces.surfaceDim),
+    surfaceBright = Color(surfaces.surfaceBright),
+    surfaceContainerLowest = Color(surfaces.surfaceContainerLowest),
+    surfaceContainerLow = Color(surfaces.surfaceContainerLow),
+    surfaceContainer = Color(surfaces.surfaceContainer),
+    surfaceContainerHigh = Color(surfaces.surfaceContainerHigh),
+    surfaceContainerHighest = Color(surfaces.surfaceContainerHighest)
 )
 
-private val DarkColorScheme = darkColorScheme(
+private fun darkScheme(surfaces: SurfacePalette): ColorScheme = darkColorScheme(
     primary = Color(0xFFC0B8FF),
     onPrimary = Color(0xFF231D60),
     primaryContainer = Color(0xFF393574),
@@ -54,43 +65,40 @@ private val DarkColorScheme = darkColorScheme(
     onTertiary = Color(0xFF5B260F),
     tertiaryContainer = Color(0xFF793C25),
     onTertiaryContainer = Color(0xFFFFDCCF),
-    background = Color(0xFF0D1016),
-    onBackground = Color(0xFFE8E9F1),
-    surface = Color(0xFF151922),
-    onSurface = Color(0xFFE8E9F1),
-    surfaceVariant = Color(0xFF232835),
-    onSurfaceVariant = Color(0xFFC2C6D3),
-    outline = Color(0xFF8C91A1),
-    outlineVariant = Color(0xFF3A404D),
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6)
+    onErrorContainer = Color(0xFFFFDAD6),
+    background = Color(surfaces.background),
+    onBackground = Color(surfaces.onBackground),
+    surface = Color(surfaces.surface),
+    onSurface = Color(surfaces.onSurface),
+    surfaceVariant = Color(surfaces.surfaceVariant),
+    onSurfaceVariant = Color(surfaces.onSurfaceVariant),
+    outline = Color(surfaces.outline),
+    outlineVariant = Color(surfaces.outlineVariant),
+    surfaceDim = Color(surfaces.surfaceDim),
+    surfaceBright = Color(surfaces.surfaceBright),
+    surfaceContainerLowest = Color(surfaces.surfaceContainerLowest),
+    surfaceContainerLow = Color(surfaces.surfaceContainerLow),
+    surfaceContainer = Color(surfaces.surfaceContainer),
+    surfaceContainerHigh = Color(surfaces.surfaceContainerHigh),
+    surfaceContainerHighest = Color(surfaces.surfaceContainerHighest)
 )
 
-object AppThemeMode {
-    const val SYSTEM = "system"
-    const val LIGHT = "light"
-    const val DARK = "dark"
-    const val AMOLED = "amoled"
+private val LightColorScheme = lightScheme(ThemePalettes.LIGHT)
+private val DarkColorScheme = darkScheme(ThemePalettes.DARK)
 
-    fun sanitize(value: String?): String = when (value?.lowercase()) {
-        LIGHT -> LIGHT
-        DARK -> DARK
-        AMOLED -> AMOLED
-        else -> SYSTEM
+/** AMOLED keeps the Dark accents and swaps in the true-black surfaces. */
+private val AmoledColorScheme = darkScheme(ThemePalettes.AMOLED)
+
+/** The colour scheme for a stored Appearance value, with System resolved against [systemDark]. */
+private fun appColorScheme(themeMode: String, systemDark: Boolean): ColorScheme =
+    when (ThemePalettes.resolveMode(themeMode, systemDark)) {
+        AppThemeMode.DARK -> DarkColorScheme
+        AppThemeMode.AMOLED -> AmoledColorScheme
+        else -> LightColorScheme
     }
-}
-
-private val AmoledColorScheme = DarkColorScheme.copy(
-    background = Color.Black,
-    onBackground = Color(0xFFF3F4FA),
-    surface = Color(0xFF080A0E),
-    onSurface = Color(0xFFF3F4FA),
-    surfaceVariant = Color(0xFF171A22),
-    onSurfaceVariant = Color(0xFFC4C8D4),
-    outlineVariant = Color(0xFF303643)
-)
 
 private val AppShapes = Shapes(
     extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
@@ -105,18 +113,10 @@ fun AppTheme(
     themeMode: String = AppThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
-    val resolvedMode = AppThemeMode.sanitize(themeMode)
-    val darkTheme = when (resolvedMode) {
-        AppThemeMode.LIGHT -> false
-        AppThemeMode.DARK, AppThemeMode.AMOLED -> true
-        else -> isSystemInDarkTheme()
-    }
-    val colorScheme = when (resolvedMode) {
-        AppThemeMode.LIGHT -> LightColorScheme
-        AppThemeMode.DARK -> DarkColorScheme
-        AppThemeMode.AMOLED -> AmoledColorScheme
-        else -> if (darkTheme) DarkColorScheme else LightColorScheme
-    }
+    val systemDark = isSystemInDarkTheme()
+    val resolvedMode = ThemePalettes.resolveMode(themeMode, systemDark)
+    val darkTheme = resolvedMode != AppThemeMode.LIGHT
+    val colorScheme = appColorScheme(resolvedMode, systemDark)
     val view = LocalView.current
 
     if (!view.isInEditMode) {
