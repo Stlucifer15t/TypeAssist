@@ -41,8 +41,10 @@ fun VersionAnnouncementDialog(versionName: String, onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Here’s what’s new:", fontWeight = FontWeight.SemiBold)
-                Text("• Refreshed Material 3 styling with System, Light, Dark and true-black AMOLED themes.")
-                Text("• A brighter animated neon-spectrum indicator with electric cyan, laser blue, violet, magenta and hot pink.")
+                Text("• An Accept · Reject · Retry chip floats next to the field after every AI command — Reject puts your original text back, Retry runs the command again.")
+                Text("• Answers from Gemini and OpenAI-compatible providers now stream into the field while the model is still writing, and the chip turns into Stop.")
+                Text("• Screen-aware commands: .reply, .sum, and .ta with @screen can answer from what is on your screen. Off until you turn it on in Settings → Screen context, and never in the apps on your blocklist.")
+                Text("• Settings → Replies controls the chip and streaming; both are on by default.")
                 Text("• This release announcement appears once for this installed version.")
             }
         },
