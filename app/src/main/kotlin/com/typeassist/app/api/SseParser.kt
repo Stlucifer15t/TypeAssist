@@ -88,7 +88,7 @@ object StreamChunkParser {
     }
 
     private fun JsonArray.firstObjectOrNull(): JsonObject? =
-        if (size == 0) null else get(0) as? JsonObject
+        if (size() == 0) null else get(0) as? JsonObject
 
     private fun JsonArray.joinText(extract: (JsonElement) -> String?): String {
         val builder = StringBuilder()

@@ -450,7 +450,7 @@ class MyAccessibilityService : AccessibilityService() {
                             executeAiCommand(config, inlinePromptTemplate, userPrompt, inputNode, currentText) { aiText ->
                                 // Replace only the matched inline command; a literal replacement keeps
                                 // dollar signs and backslashes in the answer intact.
-                                currentText.replaceFirst(Pattern.quote(fullMatchedString).toRegex()) { aiText }
+                                currentText.replaceFirst(Pattern.quote(fullMatchedString).toRegex()) { _ -> aiText }
                             }
                             return
                         }

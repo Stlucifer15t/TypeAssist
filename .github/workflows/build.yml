@@ -36,7 +36,9 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run unit tests
-        run: ./gradlew test --stacktrace 2>&1 | tee test.log
+        run: |
+          set -o pipefail
+          ./gradlew test --stacktrace 2>&1 | tee test.log
 
       - name: Upload unit test report
         if: always()
@@ -49,7 +51,9 @@ jobs:
           if-no-files-found: warn
 
       - name: Build Full release variant
-        run: ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
+        run: |
+          set -o pipefail
+          ./gradlew assembleFullRelease --stacktrace 2>&1 | tee build.log
 
       - name: Upload build log
         if: always()
@@ -67,8 +71,9 @@ jobs:
           path: app/build/outputs/apk/full/release/app-full-release-unsigned.apk
           if-no-files-found: error
 
-      # TEMPORARY diagnostic: surfaces build failures as annotations we can read
-      - name: Diagnose missing APK
+      # Prints the interesting part of the Gradle output as annotations, so a failed
+      # build points at the actual compile error instead of a missing artifact.
+      - name: Report build errors
         if: failure()
         run: |
           {

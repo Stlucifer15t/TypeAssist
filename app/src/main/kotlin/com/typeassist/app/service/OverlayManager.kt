@@ -383,7 +383,7 @@ class OverlayManager(private val context: Context) {
     /** One tappable action on the result chip. */
     data class ChipAction(val label: String, val onClick: () -> Unit)
 
-    private var resultChipView: FrameLayout? = null
+    private var resultChipView: LinearLayout? = null
     private var resultChipParams: WindowManager.LayoutParams? = null
 
     private val hideResultChipRunnable = Runnable { hideResultChip() }
