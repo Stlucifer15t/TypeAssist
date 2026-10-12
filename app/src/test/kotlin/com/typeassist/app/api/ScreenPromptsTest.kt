@@ -143,7 +143,7 @@ class ScreenPromptsTest {
 
         val sample = ScreenPrompts.voiceSample(text)
 
-        assertEquals(2, sample?.lines?.size)
+        assertEquals(2, sample?.lines()?.size)
     }
 
     @Test
