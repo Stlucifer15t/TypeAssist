@@ -16,6 +16,7 @@ import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.data.repository.UpdateRepository
 import com.typeassist.app.ui.AppTheme
 import com.typeassist.app.ui.AppThemeMode
+import com.typeassist.app.ui.ThemePalettes
 import com.typeassist.app.ui.TypeAssistApp
 import com.typeassist.app.ui.components.UpdateDialog
 import com.typeassist.app.ui.components.VersionAnnouncementDialog
@@ -39,6 +40,9 @@ class MainActivity : ComponentActivity() {
         appThemeMode = AppThemeMode.sanitize(
             appPreferences.getString("theme_mode", AppThemeMode.SYSTEM)
         )
+        // Paint the starting window in the theme the user actually chose, so launching in Dark or
+        // AMOLED never flashes a light background before Compose draws its first frame.
+        applyStartingWindowTheme()
         val updatePreferences = getSharedPreferences("UpdateInfo", Context.MODE_PRIVATE)
         showVersionAnnouncement = updatePreferences.getInt("announced_app_version_code", 0) < BuildConfig.VERSION_CODE
 
@@ -75,8 +79,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Resolves the chosen appearance against the device's night mode and sets the window background
+     * to that palette's background colour. Called before [setContent], so the very first frame is
+     * already correct.
+     */
+    private fun applyStartingWindowTheme() {
+        val systemDark = (resources.configuration.uiMode and
+            android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val resolved = ThemePalettes.resolveMode(appThemeMode, systemDark)
+        val background = ThemePalettes.surfacesFor(resolved).background
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background))
+    }
+
     private fun saveThemeMode(mode: String) {
         val safeMode = AppThemeMode.sanitize(mode)
+        applyStartingWindowTheme()
         getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
             .edit()
             .putString("theme_mode", safeMode)

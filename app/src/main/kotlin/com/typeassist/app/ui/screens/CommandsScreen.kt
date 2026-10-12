@@ -1,339 +1,329 @@
 package com.typeassist.app.ui.screens
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.InlineCommand
 import com.typeassist.app.data.Trigger
+import com.typeassist.app.ui.MonoFamily
+import com.typeassist.app.ui.Spacing
+import com.typeassist.app.ui.components.AppScaffold
+import com.typeassist.app.ui.components.AppSearchField
+import com.typeassist.app.ui.components.AppSheet
+import com.typeassist.app.ui.components.AppTextField
+import com.typeassist.app.ui.components.AppTopBar
+import com.typeassist.app.ui.components.ConfirmDialog
 import com.typeassist.app.ui.components.EmptyState
-import com.typeassist.app.ui.components.PageHeading
+import com.typeassist.app.ui.components.GhostButton
+import com.typeassist.app.ui.components.GroupCard
+import com.typeassist.app.ui.components.NoticeCard
+import com.typeassist.app.ui.components.NoticeTone
+import com.typeassist.app.ui.components.PrimaryButton
+import com.typeassist.app.ui.components.RowDivider
+import com.typeassist.app.ui.components.SectionHeader
+import com.typeassist.app.ui.components.SegmentedTabs
+import com.typeassist.app.ui.components.SheetActions
+import com.typeassist.app.ui.components.SheetHeader
+import com.typeassist.app.ui.components.TriggerRow
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * ============================== COMMANDS ==============================
+ *
+ * Two kinds of shortcut, one list each: standard triggers that end a sentence, and inline commands
+ * that run anywhere inside one. Editing happens in a sheet, so the fields get the full width of the
+ * screen and the keyboard never fights the list.
+ */
 @Composable
-fun CommandsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () -> Unit, onNavigateLibrary: () -> Unit) {
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
+fun CommandsScreen(
+    config: AppConfig,
+    onSave: (AppConfig) -> Unit,
+    onBack: () -> Unit,
+    onNavigateLibrary: () -> Unit
+) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    var showEditDialog by remember { mutableStateOf(false) }
-    var showTip by rememberSaveable { mutableStateOf(true) }
-    var tPattern by remember { mutableStateOf("") }
-    var tPrompt by remember { mutableStateOf("") }
-    
-    // We use a simple way to track what we are editing: if it matches an existing pattern.
-    // Ideally we should track the original object, but for this simple app, pattern is the key.
-    var originalPattern by remember { mutableStateOf<String?>(null) }
-    
-    var triggerToDelete by remember { mutableStateOf<Trigger?>(null) }
-    var inlineToDelete by remember { mutableStateOf<InlineCommand?>(null) }
-    
-    val triggers = config.triggers ?: mutableListOf()
-    val inlineCommands = config.inlineCommands ?: mutableListOf()
+    var editorOpen by remember { mutableStateOf(false) }
+    var editingPattern by remember { mutableStateOf<String?>(null) }
+    var draftPattern by remember { mutableStateOf("") }
+    var draftPrompt by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<Trigger?>(null) }
+    var pendingDeleteInline by remember { mutableStateOf<InlineCommand?>(null) }
 
-    val view = LocalView.current
-    val primaryColor = MaterialTheme.colorScheme.primary
+    val triggers = config.triggers.orEmpty()
+    val inlineCommands = config.inlineCommands.orEmpty()
+    val query = searchQuery.trim()
+    val visibleTriggers = triggers.filter {
+        query.isBlank() || it.pattern.contains(query, true) || it.prompt.contains(query, true)
+    }
+    val visibleInline = inlineCommands.filter {
+        query.isBlank() || it.pattern.contains(query, true) || it.prompt.contains(query, true)
+    }
+    val inlineMode = selectedTab == 1
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { 
-            TopAppBar(
-                title = { Text("Commands") }, 
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
-                actions = {
-                    IconButton(onClick = onNavigateLibrary) {
-                        Icon(Icons.Default.AutoAwesome, "Browse Gallery", tint = MaterialTheme.colorScheme.primary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
-                ) 
-            ) 
-        },
-        floatingActionButtonPosition = FabPosition.End,
-        floatingActionButton = { 
-            FloatingActionButton(
-                onClick = { 
-                    tPattern = if (selectedTab == 0) "@" else "(.ta:%)"
-                    tPrompt = ""
-                    originalPattern = null
-                    showEditDialog = true 
-                }, 
-                containerColor = MaterialTheme.colorScheme.primary
-            ) { 
-                Icon(Icons.Default.Add, "Add New Command") 
-            } 
-        }
-    ) { p ->
-        Column(modifier = Modifier.padding(p)) {
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
-            ) {
-                Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text("Standard") })
-                Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text("Inline") })
+    fun openEditor(pattern: String, prompt: String, original: String?) {
+        draftPattern = pattern
+        draftPrompt = prompt
+        editingPattern = original
+        editorOpen = true
+    }
+
+    fun commitDraft() {
+        if (draftPattern.isBlank() || draftPrompt.isBlank()) return
+        if (inlineMode) {
+            val updated = inlineCommands.toMutableList().apply {
+                editingPattern?.let { original -> removeIf { it.pattern == original } }
+                removeIf { it.pattern == draftPattern }
+                add(InlineCommand(draftPattern.trim(), draftPrompt.trim()))
             }
+            onSave(config.copy(inlineCommands = updated))
+        } else {
+            val updated = triggers.toMutableList().apply {
+                editingPattern?.let { original -> removeIf { it.pattern == original } }
+                removeIf { it.pattern == draftPattern }
+                add(Trigger(draftPattern.trim(), draftPrompt.trim()))
+            }
+            onSave(config.copy(triggers = updated))
+        }
+        editorOpen = false
+    }
 
-            LazyColumn(modifier = Modifier.padding(horizontal = 20.dp)) {
-                item {
-                    PageHeading(
-                        eyebrow = "PERSONALIZE",
-                        title = "Your commands",
-                        description = "Shape your own AI shortcuts and inline actions."
+    AppScaffold(
+        topBar = {
+            AppTopBar(
+                title = "Commands",
+                onBack = onBack,
+                actions = {
+                    GhostButton(text = "Gallery", onClick = onNavigateLibrary)
+                }
+            )
+        },
+        floatingAction = {
+            ExtendedFloatingActionButton(
+                onClick = {
+                    openEditor(
+                        pattern = if (inlineMode) "(.ta:%)" else "@",
+                        prompt = "",
+                        original = null
                     )
-                    Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(
+                },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = MaterialTheme.shapes.medium,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("New command", style = MaterialTheme.typography.labelLarge) }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = Spacing.screen,
+                end = Spacing.screen,
+                top = Spacing.sm,
+                bottom = 96.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            item {
+                Column {
+                    SegmentedTabs(
+                        items = listOf("Standard", "Inline"),
+                        selectedIndex = selectedTab,
+                        onSelect = { selectedTab = it }
+                    )
+                    Spacer(Modifier.height(Spacing.md))
+                    AppSearchField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search commands") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Clear search")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.large
+                        placeholder = "Search commands"
                     )
-                    Spacer(Modifier.height(18.dp))
                 }
-                if (showTip) {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Lightbulb, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Pro Tip: Edit Mid-Sentence", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                                    Spacer(Modifier.weight(1f))
-                                    IconButton(onClick = { showTip = false }, modifier = Modifier.size(24.dp)) {
-                                        Icon(Icons.Default.Close, "Dismiss", tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "You can create custom commands to transform just a part of your text without losing context.",
-                                    fontSize = 13.sp,
-                                    lineHeight = 18.sp,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+            }
+
+            if (inlineMode) {
+                item {
+                    NoticeCard(
+                        title = "Inline commands run mid-sentence",
+                        message = "Place one anywhere in your text and the % is replaced with the " +
+                            "surrounding words - handy for synonyms or a quick rewrite without " +
+                            "losing context.",
+                        tone = NoticeTone.Info,
+                        icon = Icons.Default.Info
+                    )
+                }
+            }
+
+            val visibleCount = if (inlineMode) visibleInline.size else visibleTriggers.size
+            item {
+                SectionHeader(
+                    title = if (inlineMode) "Inline commands" else "Standard commands",
+                    description = when {
+                        query.isNotBlank() -> "$visibleCount matching ${if (visibleCount == 1) "command" else "commands"}"
+                        visibleCount == 0 -> "None yet"
+                        else -> "$visibleCount ${if (visibleCount == 1) "command" else "commands"}, " +
+                            if (inlineMode) "usable anywhere in a sentence" else "used at the end of your text"
+                    }
+                )
+            }
+
+            if (visibleCount == 0) {
+                item {
+                    EmptyState(
+                        icon = Icons.Default.Bolt,
+                        title = if (query.isBlank()) "No commands yet" else "Nothing matched",
+                        description = if (query.isBlank()) {
+                            "Add your own shortcut, or start from a ready-made prompt in the gallery."
+                        } else {
+                            "Try a different word, or clear the search."
+                        },
+                        actionLabel = if (query.isBlank()) "Browse the gallery" else null,
+                        onAction = if (query.isBlank()) onNavigateLibrary else null
+                    )
+                }
+            } else {
+                item {
+                    GroupCard {
+                        if (inlineMode) {
+                            visibleInline.forEachIndexed { index, command ->
+                                TriggerRow(
+                                    trigger = command.pattern,
+                                    detail = command.prompt,
+                                    inline = true,
+                                    onClick = {
+                                        openEditor(command.pattern, command.prompt, command.pattern)
+                                    },
+                                    onDelete = { pendingDeleteInline = command }
                                 )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "Example: Create a command '.syn' with prompt 'Find a synonym for the last word' to search for words on the fly!",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
-                                    fontWeight = FontWeight.Medium
+                                if (index != visibleInline.lastIndex) RowDivider()
+                            }
+                        } else {
+                            visibleTriggers.forEachIndexed { index, trigger ->
+                                TriggerRow(
+                                    trigger = trigger.pattern,
+                                    detail = trigger.prompt,
+                                    onClick = {
+                                        openEditor(trigger.pattern, trigger.prompt, trigger.pattern)
+                                    },
+                                    onDelete = { pendingDelete = trigger }
                                 )
+                                if (index != visibleTriggers.lastIndex) RowDivider()
                             }
                         }
                     }
                 }
-                if (selectedTab == 0) {
-                    val visibleTriggers = triggers.filter {
-                        searchQuery.isBlank() || it.pattern.contains(searchQuery.trim(), ignoreCase = true) ||
-                            it.prompt.contains(searchQuery.trim(), ignoreCase = true)
-                    }
-                    if (visibleTriggers.isEmpty()) {
-                        item {
-                            EmptyState(
-                                icon = Icons.Default.AutoAwesome,
-                                title = if (searchQuery.isBlank()) "No commands yet" else "No matching commands",
-                                description = if (searchQuery.isBlank()) "Create a shortcut to bring your favorite writing tools into any text field." else "Try a different search term."
-                            )
-                        }
-                    } else {
-                        items(visibleTriggers) { t ->
-                            CommandItem(
-                                pattern = t.pattern,
-                                prompt = t.prompt,
-                                onEdit = {
-                                    tPattern = t.pattern
-                                    tPrompt = t.prompt
-                                    originalPattern = t.pattern
-                                    showEditDialog = true
-                                },
-                                onDelete = { triggerToDelete = t }
-                            )
-                        }
-                    }
+            }
+        }
+    }
+
+    if (editorOpen) {
+        AppSheet(onDismissRequest = { editorOpen = false }) {
+            SheetHeader(
+                title = if (editingPattern == null) "New command" else "Edit command",
+                description = if (inlineMode) {
+                    "Inline command: runs wherever you put it and replaces % with your text."
                 } else {
-                    val visibleCommands = inlineCommands.filter {
-                        searchQuery.isBlank() || it.pattern.contains(searchQuery.trim(), ignoreCase = true) ||
-                            it.prompt.contains(searchQuery.trim(), ignoreCase = true)
-                    }
-                    if (visibleCommands.isEmpty()) {
-                        item {
-                            EmptyState(
-                                icon = Icons.Default.AutoAwesome,
-                                title = if (searchQuery.isBlank()) "No inline commands yet" else "No matching commands",
-                                description = if (searchQuery.isBlank()) "Inline commands let you rewrite selected parts of a sentence." else "Try a different search term."
-                            )
-                        }
-                    } else {
-                        items(visibleCommands) { t ->
-                            CommandItem(
-                                pattern = t.pattern,
-                                prompt = t.prompt,
-                                onEdit = {
-                                    tPattern = t.pattern
-                                    tPrompt = t.prompt
-                                    originalPattern = t.pattern
-                                    showEditDialog = true
-                                },
-                                onDelete = { inlineToDelete = t }
-                            )
-                        }
-                    }
-                }
-                item { Spacer(modifier = Modifier.height(28.dp)) }
-            }
-        }
-
-        if (showEditDialog) {
-            AlertDialog(
-                onDismissRequest = { showEditDialog = false },
-                title = { Text(if (originalPattern == null) "New Command" else "Edit Command") },
-                text = {
-                    Column {
-                        OutlinedTextField(
-                            value = tPattern, 
-                            onValueChange = { tPattern = it }, 
-                            label = { Text("Pattern") },
-                            singleLine = true
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = tPrompt, 
-                            onValueChange = { tPrompt = it }, 
-                            label = { Text("System Prompt") }, 
-                            minLines = 3
-                        )
-                        if (selectedTab == 1) {
-                            Text("Use '%' as placeholder for user text.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-                        }
-                    }
+                    "Standard command: runs when you finish your text with this trigger."
                 },
-                confirmButton = {
-                    Button(onClick = {
-                        if (selectedTab == 0) {
-                            val n = triggers.toMutableList()
-                            if (originalPattern != null) n.removeIf { it.pattern == originalPattern }
-                            // Also remove if new pattern conflicts? existing logic just removed by trigger name.
-                            // We should probably just add/update.
-                            n.removeIf { it.pattern == tPattern } 
-                            n.add(Trigger(tPattern, tPrompt))
-                            onSave(config.copy(triggers = n))
-                        } else {
-                            val n = inlineCommands.toMutableList()
-                            if (originalPattern != null) n.removeIf { it.pattern == originalPattern }
-                            n.removeIf { it.pattern == tPattern }
-                            n.add(InlineCommand(tPattern, tPrompt))
-                            onSave(config.copy(inlineCommands = n))
-                        }
-                        showEditDialog = false
-                    }) { Text("Save") }
-                },
-                dismissButton = { 
-                    TextButton(onClick = { showEditDialog = false }) { Text("Cancel") } 
-                }
+                onClose = { editorOpen = false }
             )
-        }
-
-        if (triggerToDelete != null) {
-            DeleteDialog(
-                pattern = triggerToDelete?.pattern ?: "",
-                onConfirm = {
-                    val n = triggers.toMutableList()
-                    n.remove(triggerToDelete)
-                    onSave(config.copy(triggers = n))
-                    triggerToDelete = null
-                },
-                onDismiss = { triggerToDelete = null }
+            Spacer(Modifier.height(Spacing.lg))
+            AppTextField(
+                value = draftPattern,
+                onValueChange = { draftPattern = it },
+                label = if (inlineMode) "Pattern" else "Trigger",
+                placeholder = if (inlineMode) "(.ta:%)" else ".ta",
+                supporting = if (inlineMode) "Use % where your text should be inserted." else null,
+                monospace = true
             )
-        }
-        
-        if (inlineToDelete != null) {
-            DeleteDialog(
-                pattern = inlineToDelete?.pattern ?: "",
-                onConfirm = {
-                    val n = inlineCommands.toMutableList()
-                    n.remove(inlineToDelete)
-                    onSave(config.copy(inlineCommands = n))
-                    inlineToDelete = null
-                },
-                onDismiss = { inlineToDelete = null }
+            Spacer(Modifier.height(Spacing.md))
+            AppTextField(
+                value = draftPrompt,
+                onValueChange = { draftPrompt = it },
+                label = "Instruction for the AI",
+                placeholder = "Rewrite this so it sounds professional",
+                singleLine = false,
+                minLines = 4
             )
-        }
-    }
-}
-
-@Composable
-fun CommandItem(pattern: String, prompt: String, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .clickable { onEdit() },
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp), 
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) { 
-                Text(pattern, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 16.sp)
-                Text(prompt, maxLines = 1, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) 
-            }
-            IconButton(onClick = onDelete) { 
-                Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error) 
+            SheetActions {
+                PrimaryButton(
+                    text = "Save",
+                    onClick = { commitDraft() },
+                    modifier = Modifier.weight(1f),
+                    enabled = draftPattern.isNotBlank() && draftPrompt.isNotBlank()
+                )
+                GhostButton(text = "Cancel", onClick = { editorOpen = false })
             }
         }
     }
+
+    pendingDelete?.let { target ->
+        ConfirmDialog(
+            title = "Delete “${target.pattern}”?",
+            message = "This shortcut is removed from your commands. You can add it again from the gallery.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = {
+                onSave(config.copy(triggers = triggers.toMutableList().apply { remove(target) }))
+                pendingDelete = null
+            },
+            onDismiss = { pendingDelete = null }
+        )
+    }
+
+    pendingDeleteInline?.let { target ->
+        ConfirmDialog(
+            title = "Delete “${target.pattern}”?",
+            message = "This inline command is removed from your commands.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = {
+                onSave(
+                    config.copy(
+                        inlineCommands = inlineCommands.toMutableList().apply { remove(target) }
+                    )
+                )
+                pendingDeleteInline = null
+            },
+            onDismiss = { pendingDeleteInline = null }
+        )
+    }
 }
 
+/** Kept public: the guide and the gallery both show a trigger the same way. */
 @Composable
-fun DeleteDialog(pattern: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Command?") },
-        text = { Text("Are you sure you want to delete '$pattern'?") },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) { Text("Delete") }
-        },
-        dismissButton = { 
-            TextButton(onClick = onDismiss) { Text("Cancel") } 
-        }
+fun TriggerChipStyle(pattern: String) {
+    Text(
+        text = pattern,
+        style = MaterialTheme.typography.bodyMedium,
+        fontFamily = MonoFamily,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.fillMaxWidth()
     )
 }

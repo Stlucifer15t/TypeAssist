@@ -66,6 +66,37 @@ class OverlayManager(private val context: Context) {
     /** Same as [sdp] but keeps the fractional part, for stroke widths and corner radii. */
     private fun sdpF(v: Float): Float = v * indicatorScale * context.resources.displayMetrics.density
 
+    // Overlay geometry, in density-independent pixels. The old values were raw pixels, so the cards
+    // were twice as tight on a 3x screen as on a 2x one; these match the in-app design tokens.
+    private fun dp(v: Float): Int = dpF(v).toInt().coerceAtLeast(1)
+    private val chipRadius get() = dpF(999f)
+    private val cardRadius get() = dpF(14f)
+    private val cardPadding get() = dp(20f)
+    private val hairlineWidth get() = dpF(1f)
+    private val overlayWidthFraction = 0.86f
+
+    /** The app's text faces: one sans for prose, monospace for identifiers such as triggers. */
+    private val sansMedium = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+    private val monoTypeface = android.graphics.Typeface.MONOSPACE
+
+    private fun systemIsDark(): Boolean =
+        (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+            android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    /**
+     * Resolved overlay theme: the Appearance chosen in the app, with System resolved against the
+     * device's night mode. An explicit mode from the caller always wins.
+     */
+    private fun resolvedThemeMode(explicit: String?): String {
+        if (explicit != null) return ThemePalettes.resolveMode(explicit, systemIsDark())
+        val stored = try {
+            context.getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE).getString("theme_mode", null)
+        } catch (e: Exception) {
+            null
+        }
+        return ThemePalettes.resolveMode(stored, systemIsDark())
+    }
+
     fun showLoading(config: AppConfig) {
         if (!config.enableLoadingOverlay) return
         mainHandler.post {
@@ -315,11 +346,10 @@ class OverlayManager(private val context: Context) {
             elevation = dpF(4f)
         }
         val text = TextView(context).apply {
-            this.text = "Thinking..."
-            textSize = 12f * indicatorScale
+            this.text = "Thinking…"
+            textSize = 13f * indicatorScale
             setTextColor(indicatorColor)
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setShadowLayer(dpF(4f), 0f, 0f, Color.BLACK)
+            typeface = sansMedium
         }
         container.addView(progress)
         container.addView(text)
@@ -419,10 +449,10 @@ class OverlayManager(private val context: Context) {
                 gravity = Gravity.CENTER_VERTICAL
                 background = GradientDrawable().apply {
                     setColor(colors.chipBackground)
-                    cornerRadius = dpF(18f)
-                    setStroke(dpF(1f).toInt().coerceAtLeast(1), colors.chipStroke)
+                    cornerRadius = chipRadius
+                    setStroke(hairlineWidth.toInt().coerceAtLeast(1), colors.chipStroke)
                 }
-                elevation = dpF(8f)
+                elevation = dpF(4f)
                 isClickable = true
                 isFocusable = false
             }
@@ -430,17 +460,18 @@ class OverlayManager(private val context: Context) {
             actions.forEachIndexed { index, action ->
                 if (index > 0) {
                     card.addView(View(context).apply {
-                        layoutParams = LinearLayout.LayoutParams(dpF(1f).toInt().coerceAtLeast(1), dpF(18f).toInt())
+                        layoutParams = LinearLayout.LayoutParams(dp(1f), dp(20f))
                         setBackgroundColor(colors.chipDivider)
                     })
                 }
                 card.addView(TextView(context).apply {
                     text = action.label
-                    textSize = 13f
+                    textSize = 14f
                     setTextColor(actionColor(action.label, colors))
-                    setTypeface(null, android.graphics.Typeface.BOLD)
-                    setPadding(dpF(14f).toInt(), dpF(10f).toInt(), dpF(14f).toInt(), dpF(10f).toInt())
+                    typeface = sansMedium
+                    setPadding(dp(16f), dp(12f), dp(16f), dp(12f))
                     isFocusable = false
+                    isClickable = true
                     setOnClickListener { action.onClick() }
                 })
             }
@@ -489,24 +520,59 @@ class OverlayManager(private val context: Context) {
         else -> colors.accent
     }
 
-    fun showUndoButton(config: AppConfig) {        if (!config.enableUndoOverlay) return
+    /**
+     * The "Undo" pill. One tap restores the text that the last command replaced, and it removes
+     * itself. Same card language as the preview and snippet surfaces: surface fill, hairline stroke,
+     * accent label, no colour that is not part of the theme.
+     */
+    fun showUndoButton(config: AppConfig) {
+        if (!config.enableUndoOverlay) return
         mainHandler.post {
             if (undoView != null) return@post
-            undoView = FrameLayout(context)
-            val btn = Button(context).apply {
-                text = "UNDO"
-                textSize = 14f
-                setTextColor(Color.WHITE)
-                background = GradientDrawable().apply { setColor(0xEE333333.toInt()); cornerRadius = 50f; setStroke(2, Color.WHITE) }
-                setOnClickListener { 
-                    onUndoAction?.invoke() 
+            val colors = ThemePalettes.overlayColors(resolvedThemeMode(null))
+            val pill = LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = GradientDrawable().apply {
+                    setColor(colors.chipBackground)
+                    cornerRadius = cardRadius
+                    setStroke(hairlineWidth.toInt().coerceAtLeast(1), colors.chipStroke)
+                }
+                elevation = dpF(4f)
+                setPadding(dp(16f), dp(12f), dp(16f), dp(12f))
+                isClickable = true
+                setOnClickListener {
+                    onUndoAction?.invoke()
                     hideUndoButton()
                 }
             }
-            undoView?.addView(btn)
-            val params = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT)
+            pill.addView(View(context).apply {
+                background = circleDrawable(colors.accept)
+                layoutParams = LinearLayout.LayoutParams(dp(8f), dp(8f))
+            })
+            pill.addView(TextView(context).apply {
+                text = "Undo"
+                textSize = 15f
+                setTextColor(colors.accent)
+                typeface = sansMedium
+                setPadding(dp(10f), 0, 0, 0)
+            })
+
+            val container = FrameLayout(context).apply { addView(pill) }
+            undoView = container
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
             params.gravity = Gravity.CENTER
-            try { windowManager?.addView(undoView, params); mainHandler.postDelayed(hideUndoRunnable, 5000) } catch (e: Exception) {}
+            try {
+                windowManager?.addView(undoView, params)
+                mainHandler.postDelayed(hideUndoRunnable, 5000)
+            } catch (e: Exception) {
+            }
         }
     }
 
@@ -541,54 +607,48 @@ class OverlayManager(private val context: Context) {
             removePreviewInternal()
 
             val colors = ThemePalettes.overlayColors(themeMode)
-            val cardBgColor = colors.cardBackground
-            val primaryTextColor = colors.titleText
-            val secondaryTextColor = colors.bodyText
-            val discardTextColor = colors.mutedText
-            val insertTextColor = colors.accent
 
             val card = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(40, 40, 40, 40)
-                background = GradientDrawable().apply { 
-                    setColor(cardBgColor)
-                    cornerRadius = 32f 
-                    setStroke(3, colors.cardStroke)
+                setPadding(cardPadding, cardPadding, cardPadding, dp(10f))
+                background = GradientDrawable().apply {
+                    setColor(colors.cardBackground)
+                    cornerRadius = cardRadius
+                    setStroke(hairlineWidth.toInt().coerceAtLeast(1), colors.cardStroke)
                 }
                 isClickable = true
-                elevation = 20f
+                elevation = dpF(8f)
             }
 
             val title = android.widget.TextView(context).apply {
-                this.text = "Preview Response"
-                textSize = 18f
-                setTextColor(primaryTextColor)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                setPadding(0, 0, 0, 5)
+                this.text = "Preview"
+                textSize = 17f
+                setTextColor(colors.titleText)
+                typeface = sansMedium
             }
             card.addView(title)
 
             val hint = android.widget.TextView(context).apply {
-                this.text = "Long press and drag to select text portion"
-                textSize = 11f
-                setTextColor(discardTextColor)
-                setTypeface(null, android.graphics.Typeface.ITALIC)
-                setPadding(0, 0, 0, 15)
+                this.text = "Long-press to select part of the text, or insert it all."
+                textSize = 12f
+                setTextColor(colors.mutedText)
+                setPadding(0, dp(4f), 0, dp(12f))
             }
             card.addView(hint)
 
             val scrollView = android.widget.ScrollView(context).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 
-                    0 
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    0
                 ).apply { weight = 1f }
             }
             scrollView.layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.35).toInt()
-            
+
             val contentText = android.widget.TextView(context).apply {
                 this.text = text
-                textSize = 14f
-                setTextColor(secondaryTextColor)
+                textSize = 15f
+                setTextColor(colors.bodyText)
+                setLineSpacing(dpF(3f), 1f)
                 setTextIsSelectable(true)
             }
             scrollView.addView(contentText)
@@ -597,25 +657,30 @@ class OverlayManager(private val context: Context) {
             val btnRow = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.HORIZONTAL
                 gravity = Gravity.END
-                setPadding(0, 30, 0, 0)
+                setPadding(0, dp(16f), 0, 0)
             }
 
             fun createButton(label: String, color: Int, onClick: () -> Unit): Button {
                 return Button(context).apply {
                     this.text = label
+                    textSize = 14f
                     setTextColor(color)
-                    setTypeface(null, android.graphics.Typeface.BOLD)
-                    background = android.util.TypedValue().let { tv ->
-                        context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
-                        context.resources.getDrawable(tv.resourceId, context.theme)
+                    typeface = sansMedium
+                    isAllCaps = false
+                    stateListAnimator = null
+                    background = GradientDrawable().apply {
+                        setColor(Color.TRANSPARENT)
+                        cornerRadius = dpF(8f)
                     }
-                    setPadding(15, 20, 15, 20)
+                    setPadding(dp(14f), dp(10f), dp(14f), dp(10f))
+                    minWidth = 0
+                    minimumWidth = 0
                     setOnClickListener { onClick() }
                 }
             }
 
-            val discardBtn = createButton("Discard", discardTextColor) { hidePreviewDialog() }
-            val copyBtn = createButton("Copy", primaryTextColor) {
+            val discardBtn = createButton("Discard", colors.mutedText) { hidePreviewDialog() }
+            val copyBtn = createButton("Copy", colors.bodyText) {
                 val start = contentText.selectionStart
                 val end = contentText.selectionEnd
                 val min = kotlin.math.min(start, end)
@@ -630,16 +695,16 @@ class OverlayManager(private val context: Context) {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                 val clip = android.content.ClipData.newPlainText("Prompt AI response", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                
+
                 if (min >= 0 && max > min) {
                     showToast("Copied selection")
                 } else {
                     showToast("Copied full text")
                 }
             }
-            val insertBtn = createButton("Insert", insertTextColor) { 
+            val insertBtn = createButton("Insert", colors.accent) {
                 onInsert()
-                hidePreviewDialog() 
+                hidePreviewDialog()
             }
 
             btnRow.addView(discardBtn)
@@ -651,22 +716,22 @@ class OverlayManager(private val context: Context) {
             previewView?.addView(card)
 
             val rootParams = WindowManager.LayoutParams(
-                (context.resources.displayMetrics.widthPixels * 0.75).toInt(), 
+                (context.resources.displayMetrics.widthPixels * overlayWidthFraction).toInt(),
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.CENTER
             }
-            
-            try { 
-                windowManager?.addView(previewView, rootParams) 
+
+            try {
+                windowManager?.addView(previewView, rootParams)
             } catch (e: Exception) {}
         }
     }
-    
+
     fun showToast(message: String) {
         mainHandler.post { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
     }
@@ -679,7 +744,7 @@ class OverlayManager(private val context: Context) {
      */
     fun showSnippetSelection(trigger: String, variations: List<String>, themeMode: String, onSelected: (String) -> Unit) {
         if (currentSnippetTrigger == trigger) return
-        
+
         currentSnippetTrigger = trigger
         onOverlayShown?.invoke()
 
@@ -690,53 +755,66 @@ class OverlayManager(private val context: Context) {
             val cardBgColor = colors.cardBackground
             val primaryTextColor = colors.titleText
             val secondaryTextColor = colors.bodyText
-            val surfaceVariantColor = colors.divider
-            val primaryColor = colors.cardStroke
 
             val container = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
-                setPadding(40, 40, 40, 40)
+                setPadding(cardPadding, cardPadding, cardPadding, dp(10f))
                 background = GradientDrawable().apply {
                     setColor(cardBgColor)
-                    cornerRadius = 32f
-                    setStroke(3, primaryColor)
+                    cornerRadius = cardRadius
+                    setStroke(hairlineWidth.toInt().coerceAtLeast(1), colors.cardStroke)
                 }
                 isClickable = true
-                elevation = 20f
+                elevation = dpF(8f)
             }
 
             val title = android.widget.TextView(context).apply {
-                text = "Select Variation: $trigger"
-                textSize = 18f
+                text = "Choose a variation"
+                textSize = 17f
                 setTextColor(primaryTextColor)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                setPadding(0, 0, 0, 20)
+                typeface = sansMedium
             }
             container.addView(title)
+
+            val triggerLabel = android.widget.TextView(context).apply {
+                text = trigger
+                textSize = 12f
+                setTextColor(colors.mutedText)
+                typeface = monoTypeface
+                setPadding(0, dp(4f), 0, dp(12f))
+            }
+            container.addView(triggerLabel)
 
             val scrollView = android.widget.ScrollView(context).apply {
                 layoutParams = android.widget.LinearLayout.LayoutParams(
                     android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
                     0
-                ).apply { 
-                    weight = 1f 
-                }
+                ).apply { weight = 1f }
             }
             scrollView.layoutParams.height = (context.resources.displayMetrics.heightPixels * 0.35).toInt()
-            
+
             val list = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.VERTICAL
             }
 
-            variations.forEach { variation ->
+            variations.forEachIndexed { index, variation ->
+                if (index > 0) {
+                    list.addView(View(context).apply {
+                        layoutParams = android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            dp(1f)
+                        )
+                        setBackgroundColor(colors.divider)
+                    })
+                }
                 val item = android.widget.LinearLayout(context).apply {
                     orientation = android.widget.LinearLayout.VERTICAL
-                    setPadding(24, 32, 24, 32)
+                    setPadding(0, dp(14f), 0, dp(14f))
                     isClickable = true
                     val outValue = android.util.TypedValue()
                     context.theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                     setBackgroundResource(outValue.resourceId)
-                    
+
                     setOnClickListener {
                         onSelected(variation)
                         hideSnippetSelection()
@@ -745,41 +823,38 @@ class OverlayManager(private val context: Context) {
 
                 val content = android.widget.TextView(context).apply {
                     text = variation
-                    textSize = 14f
+                    textSize = 15f
                     setTextColor(secondaryTextColor)
+                    setLineSpacing(dpF(3f), 1f)
                     maxLines = 4
                     ellipsize = android.text.TextUtils.TruncateAt.END
                 }
                 item.addView(content)
-                
-                val divider = android.view.View(context).apply {
-                    layoutParams = android.widget.LinearLayout.LayoutParams(
-                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 2
-                    )
-                    setBackgroundColor(surfaceVariantColor)
-                }
-                
                 list.addView(item)
-                list.addView(divider)
             }
             scrollView.addView(list)
             container.addView(scrollView)
-            
+
             val btnRow = android.widget.LinearLayout(context).apply {
                 orientation = android.widget.LinearLayout.HORIZONTAL
                 gravity = Gravity.END
-                setPadding(0, 30, 0, 0)
+                setPadding(0, dp(16f), 0, 0)
             }
 
             val closeBtn = Button(context).apply {
                 text = "Cancel"
-                setTextColor(primaryTextColor)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                background = android.util.TypedValue().let { tv ->
-                    context.theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
-                    context.resources.getDrawable(tv.resourceId, context.theme)
+                textSize = 14f
+                setTextColor(colors.mutedText)
+                typeface = sansMedium
+                isAllCaps = false
+                stateListAnimator = null
+                background = GradientDrawable().apply {
+                    setColor(Color.TRANSPARENT)
+                    cornerRadius = dpF(8f)
                 }
-                setPadding(15, 20, 15, 20)
+                setPadding(dp(14f), dp(10f), dp(14f), dp(10f))
+                minWidth = 0
+                minimumWidth = 0
                 setOnClickListener { hideSnippetSelection() }
             }
             btnRow.addView(closeBtn)
@@ -789,11 +864,11 @@ class OverlayManager(private val context: Context) {
             snippetSelectionView?.addView(container)
 
             val params = WindowManager.LayoutParams(
-                (context.resources.displayMetrics.widthPixels * 0.80).toInt(),
+                (context.resources.displayMetrics.widthPixels * overlayWidthFraction).toInt(),
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.CENTER

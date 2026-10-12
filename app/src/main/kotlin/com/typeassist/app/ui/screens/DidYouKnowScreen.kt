@@ -1,286 +1,282 @@
 package com.typeassist.app.ui.screens
 
-import android.app.Activity
-import androidx.compose.animation.core.*
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.view.WindowCompat
-import kotlinx.coroutines.delay
+import com.typeassist.app.data.AppConfig
+import com.typeassist.app.ui.MonoFamily
+import com.typeassist.app.ui.Sizes
+import com.typeassist.app.ui.Spacing
+import com.typeassist.app.ui.components.AppCard
+import com.typeassist.app.ui.components.AppScaffold
+import com.typeassist.app.ui.components.AppTopBar
+import com.typeassist.app.ui.components.PrimaryButton
+import com.typeassist.app.ui.components.SectionHeader
+import com.typeassist.app.ui.extra
 import kotlinx.coroutines.launch
 
+/**
+ * ============================== WHAT ELSE IT CAN DO ==============================
+ *
+ * Four short pages, shown once after a feature update. Each page teaches one capability with a
+ * concrete before/after pair - no feature tour voice, no screenshots to squint at, and the triggers
+ * shown are the ones configured on this device.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DidYouKnowScreen(onFinished: () -> Unit) {
-    // Status bar logic is handled by Theme.kt now, so we remove the SideEffect here
-    // to prevent overriding the correct behavior.
-
-    val features = listOf(
-        DiscoveryFeature(
-            title = "Prompt Anywhere",
-            subtitle = "Reshape text with custom prompts",
-            description = "Instead of fixed trigger commands, this super command lets you add custom trigger commands to reshape your texts.\n\nWrite your prompts between ...here... and it will process according to your prompts.\n\nImagine you are writing an email and want to make it formal. You don't need to delete and rewrite. Just append ...Make it formal... and watch the magic happen.",
-            examples = listOf(
-                "Hey boss i cant come today ...Make it formal..." to "Dear Manager,\nI am writing to inform you that I will be unable to attend work today.",
-                "Hola amigo ...Translate to English..." to "Hello friend",
-                "Meeting at 5pm ...Add calendar emoji..." to "Meeting at 5pm 📅"
+fun DidYouKnowScreen(
+    config: AppConfig,
+    onFinished: () -> Unit
+) {
+    val pages = remember(config.globalTriggerPattern, config.snippetTriggerPrefix) {
+        listOf(
+            DiscoveryPage(
+                title = "Rewrite anything, anywhere",
+                summary = "Wrap an instruction and the text around it is rewritten in place.",
+                icon = Icons.Default.AutoFixHigh,
+                pairs = listOf(
+                    "Hey boss i cant come today ${config.globalTriggerPattern.replace("%", "make it formal")}" to
+                        "Dear Manager, I will be unable to attend work today.",
+                    "Hola amigo ${config.globalTriggerPattern.replace("%", "translate to English")}" to
+                        "Hello friend"
+                )
             ),
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-        ),
-        DiscoveryFeature(
-            title = "Instant Math",
-            subtitle = "Calculate inside any app",
-            description = "Solve math problems instantly. Just wrap the expression in '(.c: ... )'.\n\nGreat for calculating costs, splitting bills, or quick conversions while chatting.",
-            examples = listOf(
-                "Total: (.c: 25 * 4)" to "Total: 100",
-                "Share: (.c: 150 / 3)" to "Share: 50",
-                "Area: (.c: 3.14 * 5^2)" to "Area: 78.5"
+            DiscoveryPage(
+                title = "Maths without leaving the chat",
+                summary = "Calculations run on the device, so they work with the network off.",
+                icon = Icons.Default.Build,
+                pairs = listOf(
+                    "Total: (.c: 25 * 4)" to "Total: 100",
+                    "Share: (.c: 150 / 3)" to "Share: 50"
+                )
             ),
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-        ),
-        DiscoveryFeature(
-            title = "Snippets",
-            subtitle = "Text Expander",
-            description = "Save frequently used text for quick access.\n\nType the prefix '..' followed by the snippet name to expand it.\n\nUse '(.save:name:content)' to save a new snippet instantly without opening the app.",
-            examples = listOf(
-                "..email" to "my.name@example.com",
-                "..addr" to "123 Main St, New York, NY",
-                "(.save:ph:+15550199)" to "(Snippet 'ph' saved!)"
+            DiscoveryPage(
+                title = "Snippets save the typing",
+                summary = "Type the prefix plus a name to expand saved text into any field.",
+                icon = Icons.Default.Label,
+                pairs = listOf(
+                    "${config.snippetTriggerPrefix}email" to "name@example.com",
+                    config.saveSnippetPattern to "Saved without leaving the app"
+                )
             ),
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-        ),
-        DiscoveryFeature(
-            title = "Wrong Language?",
-            subtitle = "Customize AI Prompts",
-            description = "Is the AI replying in English when you want German or Spanish?\n\nYou can edit ANY command! Go to the 'Commands' menu, tap a trigger, and add 'Return in same language.' to the system prompt.\n\nIt's all about prompting—you are in control.",
-            examples = emptyList(),
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-            showLivePreview = false
-        )
-    )
-
-    val pagerState = rememberPagerState(pageCount = { features.size })
-    val scope = rememberCoroutineScope()
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    if (pagerState.currentPage < features.size - 1) {
-                        scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
-                    } else {
-                        onFinished()
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                if (pagerState.currentPage < features.size - 1) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next")
-                } else {
-                    Icon(Icons.Default.Check, "Got it")
-                }
-            }
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                IconButton(onClick = onFinished) {
-                    Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onBackground)
-                }
-            }
-
-            Text(
-                "Did You Know?",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 24.dp)
+            DiscoveryPage(
+                title = "Every command is yours to edit",
+                summary = "Answers in the wrong language, or the wrong tone? Change the instruction " +
+                    "behind the command instead of working around it.",
+                icon = Icons.Default.Tune,
+                pairs = listOf(
+                    "Commands → tap a trigger → edit the instruction" to "Add “Reply in German” and it always will"
+                )
             )
-            
-            Spacer(Modifier.height(16.dp))
+        )
+    }
 
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(horizontal = 24.dp),
-                pageSpacing = 16.dp
-            ) { page ->
-                FeatureDiscoveryCard(features[page])
-            }
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+    val scope = rememberCoroutineScope()
+    val isLastPage = pagerState.currentPage == pages.lastIndex
 
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 32.dp),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                repeat(features.size) { iteration ->
-                    val color = if (pagerState.currentPage == iteration) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                    Box(
+    AppScaffold(
+        topBar = {
+            AppTopBar(
+                title = "What else it does",
+                onBack = onFinished,
+                actions = {
+                    Text(
+                        text = if (isLastPage) "Done" else "Skip",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
-                            .padding(4.dp)
-                            .clip(CircleShape)
-                            .background(color)
-                            .size(if (pagerState.currentPage == iteration) 12.dp else 8.dp)
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { onFinished() }
+                            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
                     )
                 }
-            }
-        }
-    }
-}
-
-data class DiscoveryFeature(
-    val title: String,
-    val subtitle: String,
-    val description: String,
-    val examples: List<Pair<String, String>>,
-    val containerColor: Color,
-    val contentColor: Color,
-    val showLivePreview: Boolean = true
-)
-
-@Composable
-fun FeatureDiscoveryCard(feature: DiscoveryFeature) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = feature.containerColor),
-        elevation = CardDefaults.cardElevation(4.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp).fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(feature.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = feature.contentColor)
-            Text(feature.subtitle, style = MaterialTheme.typography.titleMedium, color = feature.contentColor.copy(alpha = 0.8f))
-            
-            if (feature.examples.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                if (feature.showLivePreview) {
-                    LivePreviewBox(feature.examples)
-                } else {
-                    StaticExamplesBox(feature.examples)
-                }
-            }
-            
-            Spacer(Modifier.height(8.dp))
-            
-            Text(feature.description, style = MaterialTheme.typography.bodyLarge, color = feature.contentColor.copy(alpha = 0.9f))
-        }
-    }
-}
-
-@Composable
-fun StaticExamplesBox(examples: List<Pair<String, String>>) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().height(140.dp)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            verticalArrangement = Arrangement.SpaceEvenly
-        ) {
-            examples.forEach { (input, output) ->
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    Text(input, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(4.dp))
-                    Text(output, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun LivePreviewBox(examples: List<Pair<String, String>>) {
-    var displayedText by remember { mutableStateOf("") }
-    var isTyping by remember { mutableStateOf(true) }
-    var currentExampleIndex by remember { mutableStateOf(0) }
-
-    LaunchedEffect(examples) {
-        while (true) {
-            val (input, output) = examples[currentExampleIndex]
-            
-            isTyping = true
-            displayedText = ""
-            for (i in 1..input.length) {
-                displayedText = input.take(i)
-                delay(80)
-            }
-            delay(500)
-            
-            isTyping = false
-            displayedText = "Processing..."
-            delay(800)
-            
-            displayedText = output
-            delay(2000)
-            
-            currentExampleIndex = (currentExampleIndex + 1) % examples.size
-        }
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth().height(140.dp)
-    ) {
-        Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.CenterStart) {
-            Text(
-                text = buildAnnotatedString {
-                    if (displayedText == "Processing...") {
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant, fontStyle = FontStyle.Italic)) {
-                            append(displayedText)
-                        }
-                    } else {
-                        append(displayedText)
-                        if (isTyping) {
-                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)) { append("|") }
-                        }
-                    }
-                },
-                fontFamily = FontFamily.Monospace,
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurface
             )
         }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f)
+            ) { pageIndex ->
+                val page = pages[pageIndex]
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = Spacing.screen,
+                        end = Spacing.screen,
+                        top = Spacing.sm,
+                        bottom = Spacing.lg
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(MaterialTheme.shapes.medium)
+                                    .background(MaterialTheme.extra.accentSoft),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = page.icon,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(Spacing.md))
+                            Text(
+                                text = page.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    item {
+                        Text(
+                            text = page.summary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    item {
+                        SectionHeader(
+                            title = "Try this",
+                            description = "The arrow shows what it becomes."
+                        )
+                    }
+                    page.pairs.forEach { pair ->
+                        item {
+                            AppCard {
+                                Text(
+                                    text = pair.first,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontFamily = MonoFamily,
+                                    color = MaterialTheme.extra.onAccentSoft,
+                                    modifier = Modifier
+                                        .clip(MaterialTheme.shapes.small)
+                                        .background(MaterialTheme.extra.accentSoft)
+                                        .padding(horizontal = Spacing.sm, vertical = Spacing.xs)
+                                )
+                                Spacer(Modifier.height(Spacing.md))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 14.dp, height = Sizes.hairline)
+                                            .background(MaterialTheme.extra.hairline)
+                                    )
+                                    Spacer(Modifier.width(Spacing.sm))
+                                    Text(
+                                        text = pair.second,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.screen, vertical = Spacing.lg)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    pages.indices.forEach { index ->
+                        val selected = pagerState.currentPage == index
+                        val color by animateColorAsState(
+                            targetValue = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.extra.hairline,
+                            animationSpec = tween(180),
+                            label = "pageDot"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = Spacing.xxs)
+                                .size(width = if (selected) 20.dp else 8.dp, height = 8.dp)
+                                .clip(CircleShape)
+                                .background(color)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(Spacing.lg))
+                PrimaryButton(
+                    text = if (isLastPage) "Got it" else "Next",
+                    onClick = {
+                        if (isLastPage) {
+                            onFinished()
+                        } else {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(Spacing.xs))
+                Text(
+                    text = "Page ${pagerState.currentPage + 1} of ${pages.size}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 
+private data class DiscoveryPage(
+    val title: String,
+    val summary: String,
+    val icon: ImageVector,
+    val pairs: List<Pair<String, String>>
+)

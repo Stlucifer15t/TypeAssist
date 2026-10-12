@@ -2,335 +2,234 @@ package com.typeassist.app.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.typeassist.app.BuildConfig
+import com.typeassist.app.MainActivity
 import com.typeassist.app.data.AppConfig
-import com.typeassist.app.data.isReasoningModel
+import com.typeassist.app.ui.AppThemeMode
+import com.typeassist.app.ui.Spacing
+import com.typeassist.app.ui.components.AppScaffold
+import com.typeassist.app.ui.components.AppTopBar
+import com.typeassist.app.ui.components.GroupCard
+import com.typeassist.app.ui.components.NavRow
+import com.typeassist.app.ui.components.RowDivider
+import com.typeassist.app.ui.components.SectionHeader
+import com.typeassist.app.ui.components.SettingRow
+import com.typeassist.app.ui.components.StatusPill
+import com.typeassist.app.ui.components.StatusTone
 
+/**
+ * ============================== SETTINGS ==============================
+ *
+ * A hub, not a wall of switches. It states the state of the app (provider, appearance, permissions)
+ * and links to the four areas that hold the controls. Everything that used to be a tab is now one
+ * tap away and titled in plain language, so nothing is buried behind an unlabelled icon.
+ */
 @Composable
-fun LocalLlmSetup(config: AppConfig, onSave: (AppConfig) -> Unit) {
+fun SettingsScreen(
+    config: AppConfig,
+    onSave: (AppConfig) -> Unit,
+    onNavigate: (String) -> Unit,
+    themeMode: String
+) {
     val context = LocalContext.current
-    var modelPath by remember { mutableStateOf(config.localLlmConfig.modelPath) }
-    var temperature by remember { mutableStateOf(config.localLlmConfig.temperature) }
-    var topP by remember { mutableStateOf(config.localLlmConfig.topP) }
-    var maxTokens by remember { mutableStateOf(config.localLlmConfig.maxTokens.toFloat()) }
-    var threads by remember { mutableStateOf(config.localLlmConfig.numThreads.toFloat()) }
-    var useGpu by remember { mutableStateOf(config.localLlmConfig.useGpu) }
-    var disableReasoning by remember { mutableStateOf(config.localLlmConfig.disableReasoning) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val activity = context as? MainActivity
+    var accessibilityOn by remember { mutableStateOf(activity?.isAccessibilityEnabled() ?: false) }
 
-    val cacheFile = remember(modelPath) { java.io.File(context.cacheDir, "local_model.gguf") }
-    var cachedSize by remember(modelPath) { mutableStateOf(if (cacheFile.exists()) cacheFile.length() else 0L) }
-
-    fun clearLocalModelStorage() {
-        val freedBytes = if (cacheFile.exists()) cacheFile.length() else 0L
-        if (cacheFile.exists()) {
-            try {
-                cacheFile.delete()
-            } catch (e: Exception) {
-                android.util.Log.e("SettingsScreen", "Failed to delete cached model file: ${e.message}")
+    DisposableEffect(lifecycleOwner, activity) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                accessibilityOn = activity?.isAccessibilityEnabled() ?: false
             }
         }
-        cachedSize = 0L
-        modelPath = ""
-        onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(modelPath = "")))
-        val freedText = if (freedBytes > 0) " Freed ${formatFileSize(freedBytes)} of storage." else ""
-        Toast.makeText(context, "Local model reference cleared.$freedText", Toast.LENGTH_LONG).show()
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    it,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (e: Exception) {
-                android.util.Log.w("SettingsScreen", "Could not take persistable permission: ${e.message}")
-            }
-            modelPath = it.toString()
-            onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(modelPath = modelPath)))
-        }
+    val providerLabel = when (config.provider) {
+        "gemini" -> "Google Gemini"
+        "cloudflare" -> "Cloudflare Workers AI"
+        "custom" -> "OpenAI-compatible API"
+        "local" -> "On-device model"
+        else -> config.provider.replaceFirstChar { it.uppercase() }
+    }
+    val themeLabel = when (AppThemeMode.sanitize(themeMode)) {
+        AppThemeMode.LIGHT -> "Light"
+        AppThemeMode.DARK -> "Dark"
+        AppThemeMode.AMOLED -> "AMOLED black"
+        else -> "System"
     }
 
-    Text("Model Configuration", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
-    Spacer(Modifier.height(8.dp))
-    
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Selected Model", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        text = getFileName(context, modelPath),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+    AppScaffold(
+        topBar = { AppTopBar(title = "Settings") }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = Spacing.screen,
+                end = Spacing.screen,
+                top = Spacing.sm,
+                bottom = Spacing.xxxl
+            ),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            item { SectionHeader(title = "Assistant") }
+            item {
+                GroupCard {
+                    NavRow(
+                        title = "Provider & model",
+                        description = "Which AI answers, and which model it uses.",
+                        icon = Icons.Default.Bolt,
+                        value = providerLabel,
+                        onClick = { onNavigate("settings/provider") }
+                    )
+                    RowDivider()
+                    NavRow(
+                        title = "Behaviour",
+                        description = "Replies, triggers, history, previews and privacy.",
+                        icon = Icons.Default.Tune,
+                        onClick = { onNavigate("settings/behaviour") }
+                    )
+                    RowDivider()
+                    NavRow(
+                        title = "Appearance",
+                        description = "Theme, floating controls and the loading indicator.",
+                        icon = Icons.Default.Palette,
+                        value = themeLabel,
+                        onClick = { onNavigate("settings/appearance") }
                     )
                 }
             }
-            
-            if (cachedSize > 0L) {
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Text("📦 Internal App Cache: ", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                    Text(formatFileSize(cachedSize), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+
+            item { SectionHeader(title = "Reliability") }
+            item {
+                GroupCard {
+                    SettingRow(
+                        title = "Permissions & service health",
+                        description = "Accessibility, notifications and battery settings.",
+                        icon = Icons.Default.Accessibility,
+                        onClick = { onNavigate("permissions") }
+                    ) {
+                        StatusPill(
+                            text = if (accessibilityOn) "Service on" else "Needs setup",
+                            tone = if (accessibilityOn) StatusTone.Active else StatusTone.Warning
+                        )
+                    }
                 }
             }
-            
-            Spacer(Modifier.height(16.dp))
-            
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = { launcher.launch(arrayOf("*/*")) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (modelPath.isBlank()) "Select Model" else "Change Model")
-                }
 
-                if (modelPath.isNotBlank() || cachedSize > 0L) {
-                    OutlinedButton(
-                        onClick = { clearLocalModelStorage() },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.small,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f))
+            item { SectionHeader(title = "Data") }
+            item {
+                GroupCard {
+                    NavRow(
+                        title = "Backup & restore",
+                        description = "Export everything to a file, or bring it back.",
+                        icon = Icons.Default.Code,
+                        onClick = { onNavigate("backup") }
+                    )
+                }
+            }
+
+            item { SectionHeader(title = "Learn & about") }
+            item {
+                GroupCard {
+                    NavRow(
+                        title = "User guide",
+                        description = "Every trigger, utility and shortcut.",
+                        icon = Icons.Default.Info,
+                        onClick = { onNavigate("guide") }
+                    )
+                    RowDivider()
+                    NavRow(
+                        title = "Tips & examples",
+                        description = "Features worth knowing about.",
+                        icon = Icons.Default.Lightbulb,
+                        onClick = { onNavigate("did_you_know") }
+                    )
+                    RowDivider()
+                    SettingRow(
+                        title = "Version",
+                        description = if (BuildConfig.SHOW_UPDATES) {
+                            "Prompt AI ${BuildConfig.VERSION_NAME}"
+                        } else {
+                            "Prompt AI ${BuildConfig.VERSION_NAME} (F-Droid build)"
+                        }
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Clear Storage", modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Clear Model Cache")
+                        Text(
+                            text = BuildConfig.VERSION_NAME,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    RowDivider()
+                    NavRow(
+                        title = "Interface preview",
+                        description = "Every colour, control and state in one place.",
+                        icon = Icons.Default.Palette,
+                        onClick = { onNavigate("preview") }
+                    )
+                    RowDivider()
+                    NavRow(
+                        title = "Source code",
+                        description = "Prompt AI is open source (GPL-3.0).",
+                        icon = Icons.Default.Code,
+                        onClick = {
+                            context.startActivity(
+                                Intent(
+                                    Intent.ACTION_VIEW,
+                                    Uri.parse("https://github.com/Stlucifer15t/TypeAssist")
+                                )
+                            )
+                        }
+                    )
+                }
+            }
+
+            item {
+                Column(modifier = Modifier.padding(top = Spacing.sm)) {
+                    Spacer(Modifier.height(Spacing.sm))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Changes save as you make them.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
         }
     }
-
-    Spacer(Modifier.height(12.dp))
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-        ),
-        shape = MaterialTheme.shapes.medium
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Low-parameter models (e.g. under 1.5B parameters) may fail to follow complex prompt instructions, yield empty responses when token budget is low, or yield wrong/unexpected responses.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
-                    lineHeight = 14.sp
-                )
-            }
-        }
-    }
-
-    Spacer(Modifier.height(24.dp))
-
-    Row(
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Use GPU Acceleration (Vulkan)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(
-                "Significantly faster on modern devices. Supports Mali and Adreno GPUs.", 
-                fontSize = 11.sp, 
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Switch(
-            checked = useGpu,
-            onCheckedChange = { 
-                useGpu = it
-                onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(useGpu = it)))
-            }
-        )
-    }
-
-    Spacer(Modifier.height(16.dp))
-
-    // --- Reasoning Model Detection ---
-    val looksLikeReasoningModel = isReasoningModel(modelPath)
-    if (looksLikeReasoningModel) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
-            ),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-                Text("🧠", fontSize = 18.sp)
-                Spacer(Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Reasoning Model Detected",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    Text(
-                        "This model outputs internal thinking (\u003cthink\u003e...\u003c/think\u003e). " +
-                        "Prompt AI automatically removes it from the final output.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
-                        lineHeight = 14.sp
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-    }
-
-    // --- Disable Reasoning Toggle ---
-    Row(
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Disable Reasoning Output", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text(
-                if (looksLikeReasoningModel)
-                    "Send /no_think hint and strip \u003cthink\u003e blocks from response."
-                else
-                    "For reasoning models: suppress thinking tokens and strip \u003cthink\u003e blocks.",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 14.sp
-            )
-        }
-        Switch(
-            checked = disableReasoning,
-            onCheckedChange = {
-                disableReasoning = it
-                onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(disableReasoning = it)))
-            }
-        )
-    }
-
-    Spacer(Modifier.height(16.dp))
-    
-    Text("Temperature: ${String.format("%.2f", temperature)}", fontSize = 14.sp)
-    Slider(value = temperature, onValueChange = { 
-        temperature = it
-        onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(temperature = it)))
-    }, valueRange = 0f..2f)
-
-    Spacer(Modifier.height(8.dp))
-
-    Text("Top-P: ${String.format("%.2f", topP)}", fontSize = 14.sp)
-    Slider(value = topP, onValueChange = { 
-        topP = it
-        onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(topP = it)))
-    }, valueRange = 0f..1f)
-
-    Spacer(Modifier.height(8.dp))
-
-    Text("Max Tokens: ${maxTokens.toInt()}", fontSize = 14.sp)
-    Slider(value = maxTokens, onValueChange = { 
-        maxTokens = it
-        onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(maxTokens = it.toInt())))
-    }, valueRange = 64f..2048f, steps = 31)
-
-    Spacer(Modifier.height(8.dp))
-
-    Text("Threads: ${threads.toInt()}", fontSize = 14.sp)
-    Slider(value = threads, onValueChange = { 
-        threads = it
-        onSave(config.copy(localLlmConfig = config.localLlmConfig.copy(numThreads = it.toInt())))
-    }, valueRange = 1f..8f, steps = 7)
-}
-
-@Composable
-fun LocalLlmHelp(primaryColor: Color, context: android.content.Context) {
-    Text("Local LLM (llama.cpp) Setup", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-    Spacer(Modifier.height(16.dp))
-    Text("Run AI entirely on your device with no internet.", fontSize = 14.sp)
-    Spacer(Modifier.height(8.dp))
-    Text("1. Download a GGUF model from Hugging Face (e.g., Qwen2-0.5B-Instruct-GGUF).", fontSize = 14.sp)
-    Text("2. Place the file in your device storage.", fontSize = 14.sp)
-    Text("3. Provide the full absolute path to the .gguf file above.", fontSize = 14.sp)
-    Text("4. Set threads to match your CPU cores (usually 4 or 8).", fontSize = 14.sp)
-    Spacer(Modifier.height(8.dp))
-    Text("Warning: Local inference is slow on older devices and consumes significant battery.", fontSize = 14.sp, color = MaterialTheme.colorScheme.error)
-}
-
-private fun getFileName(context: android.content.Context, uriOrPath: String): String {
-    if (uriOrPath.isBlank()) return "No model selected"
-    if (!uriOrPath.startsWith("content://")) {
-        return uriOrPath.substringAfterLast("/")
-    }
-    return try {
-        val uri = Uri.parse(uriOrPath)
-        var name: String? = null
-        
-        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (idx != -1) {
-                    name = cursor.getString(idx)
-                }
-            }
-        }
-
-        if (name.isNullOrBlank()) {
-            val lastSeg = Uri.decode(uri.lastPathSegment ?: "")
-            name = when {
-                lastSeg.contains(":") -> lastSeg.substringAfterLast(":")
-                lastSeg.contains("/") -> lastSeg.substringAfterLast("/")
-                else -> lastSeg
-            }
-        }
-
-        if (!name.isNullOrBlank()) name!! else "Local GGUF Model"
-    } catch (e: Exception) {
-        val last = uriOrPath.substringAfterLast("/")
-        Uri.decode(last).substringAfterLast(":")
-    }
-}
-
-private fun formatFileSize(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
-    val clampedGroup = digitGroups.coerceIn(0, units.size - 1)
-    return String.format("%.2f %s", bytes / Math.pow(1024.0, clampedGroup.toDouble()), units[clampedGroup])
 }
