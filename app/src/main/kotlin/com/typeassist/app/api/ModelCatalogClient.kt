@@ -31,11 +31,6 @@ class ModelCatalogClient(private val client: OkHttpClient = HttpClients.catalog(
         return if (System.currentTimeMillis() - entry.fetchedAt < CACHE_TTL_MS) entry.models else null
     }
 
-    companion object {
-        /** Long enough to make the picker feel instant, short enough to notice a new model. */
-        const val CACHE_TTL_MS: Long = 10 * 60 * 1000L
-    }
-
     suspend fun fetchOpenAiCompatibleModels(
         baseUrl: String,
         apiKey: String,
@@ -88,6 +83,9 @@ class ModelCatalogClient(private val client: OkHttpClient = HttpClients.catalog(
         }
 
     companion object {
+        /** Long enough to make the picker feel instant, short enough to notice a new model. */
+        const val CACHE_TTL_MS: Long = 10 * 60 * 1000L
+
         /**
          * Accepts a base URL, a `/models` URL, or the existing chat-completions URL.
          * Query parameters are intentionally omitted so API keys are only sent in headers.

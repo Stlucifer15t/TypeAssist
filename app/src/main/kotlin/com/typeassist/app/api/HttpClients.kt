@@ -103,11 +103,9 @@ object HttpClients {
      * should be typing a model ID by hand instead of waiting.
      */
     fun catalog(): OkHttpClient = byTimeout.getOrPut(CATALOG_KEY) {
-        shared.newBuilder()
+        base.newBuilder()
             .callTimeout(25, TimeUnit.SECONDS)
             .connectTimeout(minOf(15L, CONNECT_TIMEOUT_SECONDS), TimeUnit.SECONDS)
             .build()
     }
-
-    private const val CATALOG_KEY = -25L
 }
