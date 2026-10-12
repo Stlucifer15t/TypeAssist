@@ -65,7 +65,10 @@ private val announcementNotes = listOf(
     "A new Usage tab next to History shows requests and tokens per provider, for this session and " +
         "in total, so it is obvious what each model costs you.",
     "Connection failures now say what to do next - offline, timeout, wrong key, used-up credit, " +
-        "region block - instead of one generic error."
+        "region block - instead of one generic error.",
+    "Saving a provider connection no longer closes the app, and if Prompt AI ever stops " +
+        "unexpectedly it says why on the next start: the reason stays on your device, and one tap " +
+        "copies it."
 )
 @Composable
 fun VersionAnnouncementDialog(
