@@ -64,6 +64,7 @@ import com.typeassist.app.ui.components.PrimaryButton
 import com.typeassist.app.ui.components.RowDivider
 import com.typeassist.app.ui.components.ScreenIntro
 import com.typeassist.app.ui.components.SectionHeader
+import com.typeassist.app.ui.components.SecondaryButton
 import com.typeassist.app.ui.components.SettingRow
 import com.typeassist.app.ui.components.StatusPill
 import com.typeassist.app.ui.components.StatusTone
