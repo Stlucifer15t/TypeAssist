@@ -306,6 +306,19 @@ fun GuideScreen(
                 }
             }
 
+            // ---- 9. When something goes wrong ---------------------------------------------------
+            item {
+                AppCard {
+                    Text(
+                        text = "If the app closes unexpectedly, the next start says so on Home and " +
+                            "shows the technical reason, with a button that copies it. Only the " +
+                            "reason and your device model are kept — never your text.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             item {
                 AppCard {
                     Text(

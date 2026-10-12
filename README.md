@@ -170,8 +170,9 @@ The installed version shows a short **release announcement once**, on the first 
 *   **Local storage.** API keys and settings live in the app's private preferences. Saved profile rows mask keys, and the raw-JSON editor warns that it contains them.
 *   **Short-lived history.** Processed text is kept in memory for one hour by default (the window is yours to change, between 5 minutes and 24 hours), never written to storage, and can be cleared at any time.
 *   **Token counting is just counting.** The Usage tab stores only numbers — how many requests and tokens per provider and model. No text from any conversation, and nothing about the app it was typed into, is kept.
+*   **Crash reports stay on the device.** If the app closes unexpectedly, the technical reason and your device model are written to the app's private files — never your text — and shown on Home the next time you open the app, with a button that copies the details.
 *   **Offline option.** With the Local LLM provider, your text never leaves the device.
-*   **Only the permissions it needs.** Internet access for AI requests, an overlay (system alert window) for the indicator and undo button, notifications and battery-optimization access so the service survives in the background.
+*   **Only the permissions it needs.** Internet access for AI requests, network state (read-only, used to tell "no connection" apart from a provider error), an overlay (system alert window) for the indicator and undo button, notifications and battery-optimization access so the service survives in the background.
 
 ### 📜 Provider policies
 *   **Google Gemini:** [API Terms of Service](https://ai.google.dev/gemini-api/terms)

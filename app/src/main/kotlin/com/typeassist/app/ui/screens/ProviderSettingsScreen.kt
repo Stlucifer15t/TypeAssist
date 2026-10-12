@@ -393,6 +393,18 @@ fun ProviderSettingsScreen(
         }
     }
 
+    /** Turns a failure in the button above into something the user can read and act on. */
+    fun reportUnexpectedFailure(error: Throwable) {
+        isTesting = false
+        connectionResult = ConnectionTestResult(
+            succeeded = false,
+            title = "Settings were not saved",
+            message = "Nothing was sent to the provider, and your settings are unchanged. Try " +
+                "again — if this keeps happening, this is the reason: " +
+                (error.message ?: error.javaClass.simpleName)
+        )
+    }
+
     AppScaffold(
         topBar = { AppTopBar(title = "Provider & model", onBack = onBack) }
     ) { padding ->
@@ -731,103 +743,109 @@ fun ProviderSettingsScreen(
                     PrimaryButton(
                         text = if (selectedProvider == "local") "Save provider" else "Test connection & save",
                         onClick = {
-                            val newCustomConfig = CustomApiConfig(
-                                baseUrl = customBaseUrl.trim(),
-                                apiKey = customApiKey.trim(),
-                                model = customModel.trim()
-                            )
-                            val newGeminiConfig = SavedGeminiConfig(
-                                apiKey = geminiKey.trim(),
-                                model = geminiModel.trim()
-                            )
-                            val newCloudflareConfig = CloudflareConfig(
-                                accountId = cfAccountId.trim(),
-                                apiToken = cfApiToken.trim(),
-                                model = cfModel.trim()
-                            )
-
-                            // One profile per identity: saving the same endpoint + key again overlays the
-                            // existing row (updating its model) instead of adding a duplicate.
-                            val savedCustom = config.savedCustomConfigs.toMutableList()
-                            if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank()) {
-                                val index = savedCustom.indexOfFirst { it.identityKey() == newCustomConfig.identityKey() }
-                                if (index >= 0) savedCustom[index] = newCustomConfig else savedCustom.add(newCustomConfig)
-                            }
-                            val savedGemini = config.savedGeminiConfigs.toMutableList()
-                            if (selectedProvider == "gemini" && geminiKey.isNotBlank()) {
-                                val index = savedGemini.indexOfFirst { it.identityKey() == newGeminiConfig.identityKey() }
-                                if (index >= 0) savedGemini[index] = newGeminiConfig else savedGemini.add(newGeminiConfig)
-                            }
-                            val savedCloudflare = config.savedCloudflareConfigs.toMutableList()
-                            if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank()) {
-                                val index = savedCloudflare.indexOfFirst { it.identityKey() == newCloudflareConfig.identityKey() }
-                                if (index >= 0) savedCloudflare[index] = newCloudflareConfig else savedCloudflare.add(newCloudflareConfig)
-                            }
-                            val savedLocal = config.savedLocalModels
-                                .map { it.trim() }
-                                .filter { it.isNotEmpty() }
-                                .toMutableList()
-                            if (selectedProvider == "local" && config.localLlmConfig.modelPath.isNotBlank()) {
-                                val path = config.localLlmConfig.modelPath.trim()
-                                if (path !in savedLocal) savedLocal.add(path)
-                            }
-
-                            var updatedPreferences = config.modelPreferences ?: mutableListOf()
-                            when (selectedProvider) {
-                                "gemini" -> updatedPreferences = ModelSelectionPreferences.recordSelection(
-                                    updatedPreferences, "gemini", "gemini", geminiModel
+                            // Every step below can fail in ways the user cannot see, so a
+                            // failure becomes a dialog with the reason instead of a dead app.
+                            try {
+                                val newCustomConfig = CustomApiConfig(
+                                    baseUrl = customBaseUrl.trim(),
+                                    apiKey = customApiKey.trim(),
+                                    model = customModel.trim()
                                 )
-                                "custom" -> updatedPreferences = ModelSelectionPreferences.recordSelection(
-                                    updatedPreferences, "custom", customBaseUrl, customModel
+                                val newGeminiConfig = SavedGeminiConfig(
+                                    apiKey = geminiKey.trim(),
+                                    model = geminiModel.trim()
                                 )
-                            }
-
-                            var updatedConfig = config.copy(
-                                provider = selectedProvider,
-                                apiKey = geminiKey.trim(),
-                                model = geminiModel.trim(),
-                                cloudflareConfig = newCloudflareConfig,
-                                customApiConfig = newCustomConfig,
-                                savedCustomConfigs = savedCustom,
-                                savedGeminiConfigs = savedGemini,
-                                savedCloudflareConfigs = savedCloudflare,
-                                savedLocalModels = savedLocal,
-                                modelPreferences = updatedPreferences
-                            )
-                            val configured = when (selectedProvider) {
-                                "gemini" -> geminiKey.isNotBlank()
-                                "cloudflare" -> cfApiToken.isNotBlank()
-                                "custom" -> customBaseUrl.isNotBlank() && customModel.isNotBlank()
-                                "local" -> config.localLlmConfig.modelPath.isNotBlank()
-                                else -> false
-                            }
-                            if (!config.isAppEnabled && configured) {
-                                updatedConfig = updatedConfig.copy(isAppEnabled = true)
-                            }
-                            onSave(updatedConfig)
-                            Toast.makeText(context, "Provider settings saved.", Toast.LENGTH_SHORT).show()
-
-                            // Fail fast with a real reason instead of a slow timeout when the
-                            // device has no connection at all.
-                            if (selectedProvider != "local" && !hasInternet(context)) {
-                                connectionResult = ConnectionTestResult(
-                                    succeeded = false,
-                                    title = "No internet connection",
-                                    message = "Settings were saved, but the connection test needs a " +
-                                        "network. Connect to Wi-Fi or mobile data and test again."
+                                val newCloudflareConfig = CloudflareConfig(
+                                    accountId = cfAccountId.trim(),
+                                    apiToken = cfApiToken.trim(),
+                                    model = cfModel.trim()
                                 )
-                                return@PrimaryButton
-                            }
 
-                            when (selectedProvider) {
-                                "gemini" -> runGeminiTest(geminiKey.trim(), geminiModel.trim())
-                                "cloudflare" -> runCloudflareTest(cfAccountId.trim(), cfApiToken.trim(), cfModel.trim())
-                                "custom" -> runCustomTest(customBaseUrl.trim(), customApiKey.trim(), customModel.trim())
-                                else -> connectionResult = ConnectionTestResult(
-                                    true,
-                                    "Local provider saved",
-                                    "Your local model selection has been saved."
+                                // One profile per identity: saving the same endpoint + key again overlays the
+                                // existing row (updating its model) instead of adding a duplicate.
+                                val savedCustom = config.savedCustomConfigs.toMutableList()
+                                if (selectedProvider == "custom" && customBaseUrl.isNotBlank() && customModel.isNotBlank()) {
+                                    val index = savedCustom.indexOfFirst { it.identityKey() == newCustomConfig.identityKey() }
+                                    if (index >= 0) savedCustom[index] = newCustomConfig else savedCustom.add(newCustomConfig)
+                                }
+                                val savedGemini = config.savedGeminiConfigs.toMutableList()
+                                if (selectedProvider == "gemini" && geminiKey.isNotBlank()) {
+                                    val index = savedGemini.indexOfFirst { it.identityKey() == newGeminiConfig.identityKey() }
+                                    if (index >= 0) savedGemini[index] = newGeminiConfig else savedGemini.add(newGeminiConfig)
+                                }
+                                val savedCloudflare = config.savedCloudflareConfigs.toMutableList()
+                                if (selectedProvider == "cloudflare" && cfApiToken.isNotBlank()) {
+                                    val index = savedCloudflare.indexOfFirst { it.identityKey() == newCloudflareConfig.identityKey() }
+                                    if (index >= 0) savedCloudflare[index] = newCloudflareConfig else savedCloudflare.add(newCloudflareConfig)
+                                }
+                                val savedLocal = config.savedLocalModels
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() }
+                                    .toMutableList()
+                                if (selectedProvider == "local" && config.localLlmConfig.modelPath.isNotBlank()) {
+                                    val path = config.localLlmConfig.modelPath.trim()
+                                    if (path !in savedLocal) savedLocal.add(path)
+                                }
+
+                                var updatedPreferences = config.modelPreferences ?: mutableListOf()
+                                when (selectedProvider) {
+                                    "gemini" -> updatedPreferences = ModelSelectionPreferences.recordSelection(
+                                        updatedPreferences, "gemini", "gemini", geminiModel
+                                    )
+                                    "custom" -> updatedPreferences = ModelSelectionPreferences.recordSelection(
+                                        updatedPreferences, "custom", customBaseUrl, customModel
+                                    )
+                                }
+
+                                var updatedConfig = config.copy(
+                                    provider = selectedProvider,
+                                    apiKey = geminiKey.trim(),
+                                    model = geminiModel.trim(),
+                                    cloudflareConfig = newCloudflareConfig,
+                                    customApiConfig = newCustomConfig,
+                                    savedCustomConfigs = savedCustom,
+                                    savedGeminiConfigs = savedGemini,
+                                    savedCloudflareConfigs = savedCloudflare,
+                                    savedLocalModels = savedLocal,
+                                    modelPreferences = updatedPreferences
                                 )
+                                val configured = when (selectedProvider) {
+                                    "gemini" -> geminiKey.isNotBlank()
+                                    "cloudflare" -> cfApiToken.isNotBlank()
+                                    "custom" -> customBaseUrl.isNotBlank() && customModel.isNotBlank()
+                                    "local" -> config.localLlmConfig.modelPath.isNotBlank()
+                                    else -> false
+                                }
+                                if (!config.isAppEnabled && configured) {
+                                    updatedConfig = updatedConfig.copy(isAppEnabled = true)
+                                }
+                                onSave(updatedConfig)
+                                Toast.makeText(context, "Provider settings saved.", Toast.LENGTH_SHORT).show()
+
+                                // Fail fast with a real reason instead of a slow timeout when the
+                                // device has no connection at all.
+                                if (selectedProvider != "local" && !hasInternet(context)) {
+                                    connectionResult = ConnectionTestResult(
+                                        succeeded = false,
+                                        title = "No internet connection",
+                                        message = "Settings were saved, but the connection test needs a " +
+                                            "network. Connect to Wi-Fi or mobile data and test again."
+                                    )
+                                    return
+                                }
+
+                                when (selectedProvider) {
+                                    "gemini" -> runGeminiTest(geminiKey.trim(), geminiModel.trim())
+                                    "cloudflare" -> runCloudflareTest(cfAccountId.trim(), cfApiToken.trim(), cfModel.trim())
+                                    "custom" -> runCustomTest(customBaseUrl.trim(), customApiKey.trim(), customModel.trim())
+                                    else -> connectionResult = ConnectionTestResult(
+                                        true,
+                                        "Local provider saved",
+                                        "Your local model selection has been saved."
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                reportUnexpectedFailure(e)
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -948,9 +966,18 @@ private fun SecureKeyField(
  * check, and a wrong answer here only means the test runs and reports the real error.
  */
 private fun hasInternet(context: Context): Boolean {
-    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-        ?: return true
-    val network = manager.activeNetwork ?: return false
-    val capabilities = manager.getNetworkCapabilities(network) ?: return false
-    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    return try {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        if (manager == null) {
+            true
+        } else {
+            val network = manager.activeNetwork
+            val capabilities = network?.let { manager.getNetworkCapabilities(it) }
+            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ?: false
+        }
+    } catch (e: Exception) {
+        // This is a shortcut, not a gate: if the check itself is unavailable, run the test and
+        // report the provider's real answer instead of failing here.
+        true
+    }
 }

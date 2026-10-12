@@ -1,5 +1,7 @@
 package com.typeassist.app.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -15,16 +17,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Accessibility
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -46,6 +51,7 @@ import com.typeassist.app.BuildConfig
 import com.typeassist.app.MainActivity
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.model.GitHubRelease
+import com.typeassist.app.ui.Sizes
 import com.typeassist.app.ui.Spacing
 import com.typeassist.app.ui.components.AppCard
 import com.typeassist.app.ui.components.AppDialog
@@ -62,9 +68,11 @@ import com.typeassist.app.ui.components.NoticeCard
 import com.typeassist.app.ui.components.NoticeTone
 import com.typeassist.app.ui.components.RowDivider
 import com.typeassist.app.ui.components.SectionHeader
+import com.typeassist.app.ui.components.SmallButton
 import com.typeassist.app.ui.components.StatusPill
 import com.typeassist.app.ui.components.StatusTone
 import com.typeassist.app.ui.components.TriggerDemo
+import com.typeassist.app.utils.CrashLog
 
 /**
  * ============================== HOME ==============================
@@ -86,6 +94,7 @@ fun HomeScreen(
     var hasPermission by remember { mutableStateOf(activity.isAccessibilityEnabled()) }
     var showProviderDialog by remember { mutableStateOf(false) }
     var showServiceHelp by remember { mutableStateOf(false) }
+    var crashReport by remember { mutableStateOf(CrashLog.read(context)) }
 
     DisposableEffect(lifecycleOwner, activity) {
         val observer = LifecycleEventObserver { _, event ->
@@ -211,6 +220,63 @@ fun HomeScreen(
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }
                     )
+                }
+            }
+
+            // Only ever shown once, after a crash: the reason is taken from the report the app
+            // wrote while it was dying, so "it just closes sometimes" becomes something fixable.
+            crashReport?.let { report ->
+                item {
+                    AppCard(tone = CardTone.Critical) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Error,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(Sizes.icon)
+                            )
+                            Spacer(Modifier.width(Spacing.sm))
+                            Text(
+                                text = "Prompt AI closed unexpectedly",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(Modifier.height(Spacing.sm))
+                        Text(
+                            text = CrashLog.summary(report),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(Spacing.md))
+                        Row {
+                            SmallButton(
+                                text = "Copy details",
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                        as? ClipboardManager
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText("Prompt AI crash report", report)
+                                    )
+                                    Toast.makeText(
+                                        context,
+                                        "Crash details copied.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            )
+                            Spacer(Modifier.width(Spacing.sm))
+                            GhostButton(
+                                text = "Dismiss",
+                                onClick = {
+                                    CrashLog.clear(context)
+                                    crashReport = null
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
