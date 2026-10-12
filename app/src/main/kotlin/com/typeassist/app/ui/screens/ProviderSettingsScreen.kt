@@ -831,7 +831,9 @@ fun ProviderSettingsScreen(
                                         message = "Settings were saved, but the connection test needs a " +
                                             "network. Connect to Wi-Fi or mobile data and test again."
                                     )
-                                    return
+                                    // Inside a lambda a plain return is not allowed; this one
+                                    // leaves the click handler, skipping the test below.
+                                    return@PrimaryButton
                                 }
 
                                 when (selectedProvider) {
