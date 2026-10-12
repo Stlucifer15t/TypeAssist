@@ -78,13 +78,11 @@ class ScreenPromptsTest {
         assertFalse(plain.contains("keep it short and apologetic"))
         assertTrue(steered.contains("keep it short and apologetic"))
         assertTrue(steered.contains("takes priority"))
-        // Nothing else about the prompt moves: the rule is inserted, not substituted.
-        val withoutRule = steered.replace(
-            "9. The user also asked for this, and it takes priority over the tone rules: " +
-                "keep it short and apologetic",
-            ""
-        )
-        assertEquals(plain, withoutRule)
+        // Nothing else about the prompt moves: the rule is inserted as a whole line, not
+        // substituted into another one. Taking that line out has to give the plain prompt back.
+        val ruleLine = steered.lineSequence().first { it.contains("keep it short and apologetic") }
+        assertTrue(ruleLine.startsWith("9. "))
+        assertEquals(plain, steered.replace("\n" + ruleLine, ""))
     }
 
     @Test
