@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
@@ -37,9 +38,13 @@ import com.typeassist.app.api.ApiErrorFormatter
 import com.typeassist.app.api.CloudflareApiClient
 import com.typeassist.app.api.CustomApiClient
 import com.typeassist.app.api.ModelCatalogClient
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.CloudflareConfig
 import com.typeassist.app.data.CustomApiConfig
+import com.typeassist.app.data.GenerationSettings
 import com.typeassist.app.data.ModelSelectionPreferences
 import com.typeassist.app.data.SavedGeminiConfig
 import com.typeassist.app.data.identityKey
@@ -49,6 +54,7 @@ import com.typeassist.app.ui.components.AppDialog
 import com.typeassist.app.ui.components.AppScaffold
 import com.typeassist.app.ui.components.AppTextField
 import com.typeassist.app.ui.components.AppTopBar
+import com.typeassist.app.ui.components.CardFact
 import com.typeassist.app.ui.components.ChoiceRow
 import com.typeassist.app.ui.components.GroupCard
 import com.typeassist.app.ui.components.ModelPicker
@@ -66,12 +72,17 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.util.Locale
 import kotlin.coroutines.coroutineContext
 
 private data class ConnectionTestResult(
     val succeeded: Boolean,
     val title: String,
-    val message: String
+    val message: String,
+    /** Round-trip time of the test request, so a slow provider is visible rather than guessed at. */
+    val latencyMs: Long? = null,
+    /** The failure was a timeout, which the network-timeout setting can fix. */
+    val suggestsLongerTimeout: Boolean = false
 )
 
 /**
@@ -91,7 +102,9 @@ fun ProviderSettingsScreen(
     client: OkHttpClient,
     onSave: (AppConfig) -> Unit,
     onBack: () -> Unit,
-    onNavigateLocal: () -> Unit
+    onNavigateLocal: () -> Unit,
+    onNavigateGeneration: () -> Unit,
+    onNavigateBehaviour: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -215,9 +228,23 @@ fun ProviderSettingsScreen(
         }
     }
 
-    fun finishTest(succeeded: Boolean, title: String, message: String) {
+    fun finishTest(
+        succeeded: Boolean,
+        title: String,
+        message: String,
+        startedAt: Long? = null,
+        error: Throwable? = null
+    ) {
         isTesting = false
-        connectionResult = ConnectionTestResult(succeeded, title, message)
+        val elapsed = startedAt?.let { System.currentTimeMillis() - it }
+        val timeoutHint = error != null && message.contains("timed out", ignoreCase = true)
+        connectionResult = ConnectionTestResult(
+            succeeded = succeeded,
+            title = title,
+            message = message,
+            latencyMs = elapsed,
+            suggestsLongerTimeout = timeoutHint
+        )
     }
 
     fun runGeminiTest(apiKey: String, model: String) {
@@ -230,6 +257,7 @@ fun ProviderSettingsScreen(
             return
         }
         isTesting = true
+        val startedAt = System.currentTimeMillis()
         scope.launch {
             try {
                 val available = modelCatalog.fetchGeminiModels(apiKey.trim())
@@ -240,13 +268,15 @@ fun ProviderSettingsScreen(
                     finishTest(
                         true,
                         "Gemini connection successful",
-                        "The API key works and ${available.size} text-generation models are available."
+                        "The API key works and ${available.size} text-generation models are available.",
+                        startedAt
                     )
                 } else if (available.any { it.equals(model.trim(), ignoreCase = true) }) {
                     finishTest(
                         true,
                         "Gemini connection successful",
-                        "The API key works and “${model.trim()}” is available for text generation."
+                        "The API key works and “${model.trim()}” is available for text generation.",
+                        startedAt
                     )
                 } else {
                     finishTest(
@@ -254,13 +284,14 @@ fun ProviderSettingsScreen(
                         "Gemini connected, model not found",
                         "The key is valid, but “${model.trim()}” was not in the available text-generation " +
                             "models. Refresh the list and choose an available model, or enter a model ID " +
-                            "your account supports."
+                            "your account supports.",
+                        startedAt
                     )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                finishTest(false, "Gemini connection failed", ApiErrorFormatter.explain(e))
+                finishTest(false, "Gemini connection failed", ApiErrorFormatter.explain(e), startedAt, e)
             }
         }
     }
@@ -275,14 +306,16 @@ fun ProviderSettingsScreen(
             return
         }
         isTesting = true
+        val startedAt = System.currentTimeMillis()
         try {
             CustomApiClient(client).callCustomApi(
-                baseUrl.trim(),
-                apiKey.trim(),
-                model.trim(),
-                "You are a connection-test assistant. Reply with exactly: Connected.",
-                "Reply with exactly: Connected.",
-                config.apiTimeoutSeconds
+                baseUrl = baseUrl.trim(),
+                apiKey = apiKey.trim(),
+                model = model.trim(),
+                prompt = "You are a connection-test assistant. Reply with exactly: Connected.",
+                userText = "Reply with exactly: Connected.",
+                generation = GenerationSettings.sanitize(config.generationConfig),
+                timeoutSeconds = config.apiTimeoutSeconds
             ) { result ->
                 scope.launch {
                     result.fold(
@@ -290,17 +323,24 @@ fun ProviderSettingsScreen(
                             finishTest(
                                 true,
                                 "Custom API connection successful",
-                                "The endpoint accepted the request and returned a model response."
+                                "The endpoint accepted the request and returned a model response.",
+                                startedAt
                             )
                         },
                         onFailure = {
-                            finishTest(false, "Custom API connection failed", ApiErrorFormatter.explain(it))
+                            finishTest(
+                                false,
+                                "Custom API connection failed",
+                                ApiErrorFormatter.explain(it),
+                                startedAt,
+                                it
+                            )
                         }
                     )
                 }
             }
         } catch (e: Exception) {
-            finishTest(false, "Custom API connection failed", ApiErrorFormatter.explain(e))
+            finishTest(false, "Custom API connection failed", ApiErrorFormatter.explain(e), startedAt, e)
         }
     }
 
@@ -314,14 +354,16 @@ fun ProviderSettingsScreen(
             return
         }
         isTesting = true
+        val startedAt = System.currentTimeMillis()
         try {
             CloudflareApiClient(client).callCloudflare(
-                accountId.trim(),
-                token.trim(),
-                model.trim(),
-                "You are a connection-test assistant. Reply with exactly: Connected.",
-                "Reply with exactly: Connected.",
-                config.apiTimeoutSeconds
+                accountId = accountId.trim(),
+                apiToken = token.trim(),
+                model = model.trim(),
+                prompt = "You are a connection-test assistant. Reply with exactly: Connected.",
+                userText = "Reply with exactly: Connected.",
+                generation = GenerationSettings.sanitize(config.generationConfig),
+                timeoutSeconds = config.apiTimeoutSeconds
             ) { result ->
                 scope.launch {
                     result.fold(
@@ -329,17 +371,24 @@ fun ProviderSettingsScreen(
                             finishTest(
                                 true,
                                 "Cloudflare connection successful",
-                                "The account accepted the request and returned a model response."
+                                "The account accepted the request and returned a model response.",
+                                startedAt
                             )
                         },
                         onFailure = {
-                            finishTest(false, "Cloudflare connection failed", ApiErrorFormatter.explain(it))
+                            finishTest(
+                                false,
+                                "Cloudflare connection failed",
+                                ApiErrorFormatter.explain(it),
+                                startedAt,
+                                it
+                            )
                         }
                     )
                 }
             }
         } catch (e: Exception) {
-            finishTest(false, "Cloudflare connection failed", ApiErrorFormatter.explain(e))
+            finishTest(false, "Cloudflare connection failed", ApiErrorFormatter.explain(e), startedAt, e)
         }
     }
 
@@ -367,8 +416,10 @@ fun ProviderSettingsScreen(
 
             item {
                 SettingRow(
-                    title = "Active provider",
-                    description = "Used for every AI command."
+                    title = "Text generation",
+                    description = GenerationSettings.summary(config),
+                    icon = Icons.Default.Tune,
+                    onClick = onNavigateGeneration
                 ) {
                     StatusPill(
                         text = when (selectedProvider) {
@@ -755,6 +806,18 @@ fun ProviderSettingsScreen(
                             onSave(updatedConfig)
                             Toast.makeText(context, "Provider settings saved.", Toast.LENGTH_SHORT).show()
 
+                            // Fail fast with a real reason instead of a slow timeout when the
+                            // device has no connection at all.
+                            if (selectedProvider != "local" && !hasInternet(context)) {
+                                connectionResult = ConnectionTestResult(
+                                    succeeded = false,
+                                    title = "No internet connection",
+                                    message = "Settings were saved, but the connection test needs a " +
+                                        "network. Connect to Wi-Fi or mobile data and test again."
+                                )
+                                return@PrimaryButton
+                            }
+
                             when (selectedProvider) {
                                 "gemini" -> runGeminiTest(geminiKey.trim(), geminiModel.trim())
                                 "cloudflare" -> runCloudflareTest(cfAccountId.trim(), cfApiToken.trim(), cfModel.trim())
@@ -774,7 +837,8 @@ fun ProviderSettingsScreen(
                     Spacer(Modifier.height(Spacing.sm))
                     Text(
                         text = "The test sends one short sample request to the provider, so provider " +
-                            "usage or billing may apply. Nothing is sent until you press this button.",
+                            "usage or billing may apply. Nothing is sent until you press this button. " +
+                            "A dropped connection is retried once automatically.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -802,7 +866,28 @@ fun ProviderSettingsScreen(
             onConfirm = { connectionResult = null },
             icon = if (result.succeeded) Icons.Default.CheckCircle else Icons.Default.Error,
             iconTint = if (result.succeeded) MaterialTheme.extra.success else MaterialTheme.colorScheme.error
-        )
+        ) {
+            if (result.latencyMs != null) {
+                CardFact(
+                    label = "Round trip",
+                    value = if (result.latencyMs < 1000) {
+                        "${result.latencyMs} ms"
+                    } else {
+                        String.format(Locale.US, "%.1f s", result.latencyMs / 1000.0)
+                    }
+                )
+            }
+            if (result.suggestsLongerTimeout) {
+                SecondaryButton(
+                    text = "Open network timeout",
+                    onClick = {
+                        connectionResult = null
+                        onNavigateBehaviour()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 
@@ -855,4 +940,16 @@ private fun SecureKeyField(
             }
         }
     )
+}
+
+/**
+ * Whether the device currently has a usable connection. No permission is needed for the capability
+ * check, and a wrong answer here only means the test runs and reports the real error.
+ */
+private fun hasInternet(context: Context): Boolean {
+    val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: return true
+    val network = manager.activeNetwork ?: return false
+    val capabilities = manager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }

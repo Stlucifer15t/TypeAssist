@@ -65,6 +65,7 @@ import com.typeassist.app.ui.screens.BehaviourSettingsScreen
 import com.typeassist.app.ui.screens.CommandLibraryScreen
 import com.typeassist.app.ui.screens.CommandsScreen
 import com.typeassist.app.ui.screens.DidYouKnowScreen
+import com.typeassist.app.ui.screens.GenerationSettingsScreen
 import com.typeassist.app.ui.screens.GuideScreen
 import com.typeassist.app.ui.screens.HistoryScreen
 import com.typeassist.app.ui.screens.HomeScreen
@@ -72,6 +73,7 @@ import com.typeassist.app.ui.screens.LocalLlmScreen
 import com.typeassist.app.ui.screens.PermissionsScreen
 import com.typeassist.app.ui.screens.ProviderSettingsScreen
 import com.typeassist.app.ui.screens.SettingsScreen
+import com.typeassist.app.ui.screens.UsageScreen
 import com.typeassist.app.ui.screens.SnippetsScreen
 import com.typeassist.app.ui.screens.SystemPreviewScreen
 import com.typeassist.app.ui.screens.TestScreen
@@ -338,7 +340,10 @@ fun TypeAssistApp(
                     onSave = { saveConfig(it) },
                     onBack = { navigateTo("home") }
                 )
-                "history" -> HistoryScreen(onBack = { navigateTo("home") })
+                "history" -> HistoryScreen(
+                    retentionMinutes = config.historyRetentionMinutes,
+                    onBack = { navigateTo("home") }
+                )
                 "settings" -> {
                     val section = screen.substringAfter("/", "")
                     when (section) {
@@ -354,7 +359,20 @@ fun TypeAssistApp(
                             client = client,
                             onSave = { saveConfig(it) },
                             onBack = { navigateTo("settings") },
+                            onNavigateLocal = { navigateTo("settings/local") },
+                            onNavigateGeneration = { navigateTo("settings/generation") },
+                            onNavigateBehaviour = { navigateTo("settings/behaviour") }
+                        )
+                        "generation" -> GenerationSettingsScreen(
+                            config = config,
+                            onSave = { saveConfig(it) },
+                            onBack = { navigateTo("settings") },
                             onNavigateLocal = { navigateTo("settings/local") }
+                        )
+                        "usage" -> UsageScreen(
+                            onBack = { navigateTo("settings") },
+                            onOpenGeneration = { navigateTo("settings/generation") },
+                            onOpenProviders = { navigateTo("settings/provider") }
                         )
                         "behaviour" -> BehaviourSettingsScreen(
                             config = config,

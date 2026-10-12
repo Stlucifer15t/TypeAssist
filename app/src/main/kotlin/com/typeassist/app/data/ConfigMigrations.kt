@@ -7,7 +7,7 @@ package com.typeassist.app.data
  * `null` instead of its Kotlin default (the same problem [LoadingIndicatorStyle.sanitize] solves
  * for the indicator colour and size).
  */
-const val CURRENT_CONFIG_VERSION: Int = 2
+const val CURRENT_CONFIG_VERSION: Int = 3
 
 /**
  * Apps where screen reading is never used, preloaded into Settings → Screen context.
@@ -53,19 +53,47 @@ object ConfigMigrations {
 
         // Configs written before version 2 predate the result chip, streaming and screen context,
         // so those settings must start from their intended defaults instead of Gson's zero values.
-        // A config from a newer version is left untouched (only its own app knows those fields).
-        if (result.configVersion < CURRENT_CONFIG_VERSION) {
+        if (result.configVersion < 2) {
             result = result.copy(
-                configVersion = CURRENT_CONFIG_VERSION,
                 showResultChip = true,
                 streamResponses = true,
                 screenContextChatLabels = true
             )
         }
 
+        // A config from a newer version keeps its number: only its own build knows those fields.
+        if (result.configVersion < CURRENT_CONFIG_VERSION) {
+            result = result.copy(configVersion = CURRENT_CONFIG_VERSION)
+        }
+
         // A missing (or cleared) blocklist must never leave screen reading unguarded.
         if (result.screenContextBlockedPackages == null) {
             result = result.copy(screenContextBlockedPackages = defaultBlockedScreenPackages())
+        }
+
+        // Version 3 added the generation parameters, the reply style and the history retention.
+        // Their defaults cannot come from the Kotlin constructor on a loaded config, so they are
+        // repaired here: a missing `generationConfig` would otherwise be dereferenced by the API
+        // clients, and a missing retention would expire the history instantly. Everything in this
+        // block returns the same instance when there is nothing to fix.
+        if (result.generationConfig == null) {
+            result = result.copy(generationConfig = GenerationSettings.defaults())
+        } else {
+            val sanitizedGeneration = GenerationSettings.sanitize(result.generationConfig)
+            if (sanitizedGeneration != result.generationConfig) {
+                result = result.copy(generationConfig = sanitizedGeneration)
+            }
+        }
+
+        val tone = ReplyStyle.sanitizeTone(result.replyTone)
+        if (result.replyTone != tone) result = result.copy(replyTone = tone)
+
+        val length = ReplyStyle.sanitizeLength(result.replyLength)
+        if (result.replyLength != length) result = result.copy(replyLength = length)
+
+        val retention = HistoryManager.sanitizeRetentionMinutes(result.historyRetentionMinutes)
+        if (result.historyRetentionMinutes != retention) {
+            result = result.copy(historyRetentionMinutes = retention)
         }
 
         return result

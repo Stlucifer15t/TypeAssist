@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.ui.MonoFamily
 import com.typeassist.app.ui.Spacing
@@ -40,6 +41,7 @@ import com.typeassist.app.ui.components.GhostButton
 import com.typeassist.app.ui.components.GroupCard
 import com.typeassist.app.ui.components.RowDivider
 import com.typeassist.app.ui.components.ScreenIntro
+import com.typeassist.app.ui.components.SegmentedTabs
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,72 +49,109 @@ import java.util.Locale
 /**
  * ============================== HISTORY ==============================
  *
- * The last five minutes of processed text, so nothing you replaced is ever really gone. The title
- * states the window, the rows are timestamped left-to-right, and copying is one tap per row.
+ * Two related views of what the assistant has done: the recent processed text (so nothing you
+ * replaced is ever really gone) and the token counts behind those commands. The second view is a
+ * tab on this screen rather than a sixth bottom-bar destination, which keeps the bar readable and
+ * puts "what did it do" next to "what did it use".
+ *
+ * The retention window comes from settings (one hour by default), rows are timestamped, and copying
+ * is one tap per row.
  */
 @Composable
-fun HistoryScreen(onBack: () -> Unit) {
+fun HistoryScreen(
+    retentionMinutes: Int,
+    onBack: () -> Unit
+) {
+    val window = HistoryManager.describeRetention(retentionMinutes)
     var historyItems by remember { mutableStateOf(HistoryManager.getHistory()) }
     val context = LocalContext.current
     var showClearDialog by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(0) }
 
     AppScaffold(
         topBar = {
             AppTopBar(
-                title = "History",
+                title = if (tab == 1) "Token usage" else "History",
                 onBack = onBack,
                 actions = {
-                    if (historyItems.isNotEmpty()) {
+                    if (tab == 0 && historyItems.isNotEmpty()) {
                         GhostButton(text = "Clear", onClick = { showClearDialog = true })
                     }
                 }
             )
         }
     ) { padding ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(
-                start = Spacing.screen,
-                end = Spacing.screen,
-                top = Spacing.sm,
-                bottom = Spacing.xxxl
-            ),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                .padding(padding)
         ) {
-            item {
-                ScreenIntro("Text you processed in the last five minutes. Copy anything back, or clear the list.")
-            }
+            SegmentedTabs(
+                items = listOf("History", "Usage"),
+                selectedIndex = tab,
+                onSelect = { tab = it },
+                modifier = Modifier.padding(
+                    start = Spacing.screen,
+                    end = Spacing.screen,
+                    top = Spacing.sm,
+                    bottom = Spacing.xs
+                )
+            )
 
-            if (historyItems.isEmpty()) {
-                item {
-                    EmptyState(
-                        icon = Icons.Default.Schedule,
-                        title = "Nothing yet",
-                        description = "Text processed with Prompt AI shows up here for five minutes."
-                    )
-                }
+            if (tab == 1) {
+                UsageContent(
+                    padding = PaddingValues(0.dp),
+                    showIntro = true
+                )
             } else {
-                item {
-                    GroupCard {
-                        // The list is at most a few minutes of recent text, so it is laid out in
-                        // full inside one card rather than as a nested lazy list.
-                        historyItems.forEachIndexed { index, entry ->
-                            HistoryRow(
-                                time = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-                                    .format(Date(entry.timestamp)),
-                                text = entry.text,
-                                onCopy = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
-                                        as ClipboardManager
-                                    clipboard.setPrimaryClip(
-                                        ClipData.newPlainText("History item", entry.text)
-                                    )
-                                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = Spacing.screen,
+                        end = Spacing.screen,
+                        top = Spacing.xs,
+                        bottom = Spacing.xxxl
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                ) {
+                    item {
+                        ScreenIntro(
+                            "Text you processed in the last $window. Copy anything back, or clear " +
+                                "the list. Change the window in Settings › Behaviour."
+                        )
+                    }
+
+                    if (historyItems.isEmpty()) {
+                        item {
+                            EmptyState(
+                                icon = Icons.Default.Schedule,
+                                title = "Nothing yet",
+                                description = "Text you process shows up here for $window."
                             )
-                            if (index != historyItems.lastIndex) RowDivider()
+                        }
+                    } else {
+                        item {
+                            GroupCard {
+                                // The list is capped by HistoryManager, so it is laid out in full
+                                // inside one card rather than as a nested lazy list.
+                                historyItems.forEachIndexed { index, entry ->
+                                    HistoryRow(
+                                        time = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+                                            .format(Date(entry.timestamp)),
+                                        text = entry.text,
+                                        onCopy = {
+                                            val clipboard = context.getSystemService(
+                                                Context.CLIPBOARD_SERVICE
+                                            ) as ClipboardManager
+                                            clipboard.setPrimaryClip(
+                                                ClipData.newPlainText("History item", entry.text)
+                                            )
+                                            Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                    if (index != historyItems.lastIndex) RowDivider()
+                                }
+                            }
                         }
                     }
                 }
@@ -123,7 +162,7 @@ fun HistoryScreen(onBack: () -> Unit) {
     if (showClearDialog) {
         ConfirmDialog(
             title = "Clear history?",
-            message = "This removes every item currently kept in your five-minute history. " +
+            message = "This removes every item kept in your $window history. " +
                 "Text already inserted into other apps is not affected.",
             confirmLabel = "Clear history",
             destructive = true,

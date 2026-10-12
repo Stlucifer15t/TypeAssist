@@ -81,6 +81,14 @@ fun BehaviourSettingsScreen(
     var historyEnabled by remember(config.isHistoryEnabled) { mutableStateOf(config.isHistoryEnabled) }
     var previewEnabled by remember(config.enablePreviewDialog) { mutableStateOf(config.enablePreviewDialog) }
     var timeout by remember(config.apiTimeoutSeconds) { mutableStateOf(config.apiTimeoutSeconds.toFloat()) }
+    var retentionMinutes by remember(config.historyRetentionMinutes) {
+        mutableStateOf(HistoryManager.sanitizeRetentionMinutes(config.historyRetentionMinutes))
+    }
+    var replyTone by remember(config.replyTone) { mutableStateOf(ReplyStyle.sanitizeTone(config.replyTone)) }
+    var replyLength by remember(config.replyLength) {
+        mutableStateOf(ReplyStyle.sanitizeLength(config.replyLength))
+    }
+    var customRetention by remember { mutableStateOf("") }
 
     var screenContextEnabled by remember(config.screenContextEnabled) {
         mutableStateOf(config.screenContextEnabled)
@@ -187,19 +195,150 @@ fun BehaviourSettingsScreen(
                 }
             }
 
+            item { SectionHeader(title = "Drafted replies") }
+            item {
+                GroupCard {
+                    SettingRow(
+                        title = "Tone",
+                        description = ReplyStyle.toneName(replyTone),
+                        icon = Icons.Default.Chat
+                    ) {
+                        MonoChip(text = ".reply")
+                    }
+                    ReplyStyle.TONES.forEach { option ->
+                        RowDivider()
+                        ChoiceRow(
+                            title = option.name,
+                            description = option.description,
+                            selected = replyTone == option.id,
+                            useRadio = false,
+                            onSelect = {
+                                replyTone = option.id
+                                onSave(config.copy(replyTone = option.id))
+                            }
+                        )
+                    }
+                }
+            }
+            item {
+                GroupCard {
+                    SettingRow(
+                        title = "Length",
+                        description = ReplyStyle.lengthName(replyLength)
+                    )
+                    ReplyStyle.LENGTHS.forEach { option ->
+                        RowDivider()
+                        ChoiceRow(
+                            title = option.name,
+                            description = option.description,
+                            selected = replyLength == option.id,
+                            useRadio = false,
+                            onSelect = {
+                                replyLength = option.id
+                                onSave(config.copy(replyLength = option.id))
+                            }
+                        )
+                    }
+                }
+            }
+            item {
+                NoticeCard(
+                    title = "Used by .reply and .sum",
+                    message = "The tone and length are sent as instructions with the request, together " +
+                        "with the screen text. They apply to plain .reply, and the length also caps " +
+                        "how long a summary may be.",
+                    tone = NoticeTone.Info,
+                    icon = Icons.Default.Info
+                )
+            }
+
             item { SectionHeader(title = "History") }
             item {
                 GroupCard {
                     SwitchRow(
                         title = "Keep processed text",
-                        description = "Saves results for five minutes so you can recover or copy them.",
+                        description = "Stores the text a command replaced, so you can recover or copy it.",
                         checked = historyEnabled,
                         onCheckedChange = {
                             historyEnabled = it
                             onSave(config.copy(isHistoryEnabled = it))
                         }
                     )
+                    if (historyEnabled) {
+                        RowDivider()
+                        SettingRow(
+                            title = "Keep for",
+                            description = if (retentionMinutes == HistoryManager.DEFAULT_RETENTION_MINUTES) {
+                                "The default. Long enough to fix a mistake made earlier in the day."
+                            } else {
+                                "Older entries disappear on their own."
+                            }
+                        ) {
+                            Text(
+                                text = HistoryManager.describeRetention(retentionMinutes),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
+            }
+            if (historyEnabled) {
+                item {
+                    GroupCard {
+                        HistoryManager.RETENTION_CHOICES.forEach { minutes ->
+                            ChoiceRow(
+                                title = HistoryManager.describeRetention(minutes),
+                                selected = retentionMinutes == minutes,
+                                useRadio = false,
+                                onSelect = {
+                                    retentionMinutes = minutes
+                                    onSave(config.copy(historyRetentionMinutes = minutes))
+                                }
+                            )
+                            RowDivider()
+                        }
+                        Row(
+                            modifier = Modifier.padding(horizontal = Spacing.card, vertical = Spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AppTextField(
+                                value = customRetention,
+                                onValueChange = { typed ->
+                                    customRetention = typed.filter { it.isDigit() }.take(4)
+                                },
+                                label = "Custom (minutes)",
+                                placeholder = "90",
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(Spacing.sm))
+                            SmallButton(
+                                text = "Apply",
+                                enabled = customRetention.toIntOrNull()?.let {
+                                    HistoryManager.sanitizeRetentionMinutes(it) != retentionMinutes
+                                } == true,
+                                onClick = {
+                                    val minutes = HistoryManager.sanitizeRetentionMinutes(
+                                        customRetention.toIntOrNull() ?: 0
+                                    )
+                                    retentionMinutes = minutes
+                                    customRetention = ""
+                                    onSave(config.copy(historyRetentionMinutes = minutes))
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                NoticeCard(
+                    title = "History stays on this device",
+                    message = "Entries live in memory only, and the list is cleared when the service " +
+                        "restarts. Nothing is written to storage, and nothing is sent anywhere.",
+                    tone = NoticeTone.Info,
+                    icon = Icons.Default.Schedule
+                )
             }
 
             item { SectionHeader(title = "Timeouts") }

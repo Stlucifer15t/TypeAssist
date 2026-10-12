@@ -37,6 +37,7 @@ import com.typeassist.app.BuildConfig
 import com.typeassist.app.MainActivity
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.ui.AppThemeMode
+import com.typeassist.app.data.GenerationSettings
 import com.typeassist.app.ui.Spacing
 import com.typeassist.app.ui.components.AppScaffold
 import com.typeassist.app.ui.components.AppTopBar
@@ -125,6 +126,14 @@ fun SettingsScreen(
                     )
                     RowDivider()
                     NavRow(
+                        title = "Text generation",
+                        description = "How literal the answers are, and how long they may be.",
+                        icon = Icons.Default.Speed,
+                        value = GenerationSettings.summary(config),
+                        onClick = { onNavigate("settings/generation") }
+                    )
+                    RowDivider()
+                    NavRow(
                         title = "Appearance",
                         description = "Theme, floating controls and the loading indicator.",
                         icon = Icons.Default.Palette,
@@ -154,6 +163,13 @@ fun SettingsScreen(
             item { SectionHeader(title = "Data") }
             item {
                 GroupCard {
+                    NavRow(
+                        title = "Token usage",
+                        description = "Requests and tokens per provider, for this session and in total.",
+                        icon = Icons.Default.Speed,
+                        onClick = { onNavigate("settings/usage") }
+                    )
+                    RowDivider()
                     NavRow(
                         title = "Backup & restore",
                         description = "Export everything to a file, or bring it back.",

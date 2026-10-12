@@ -16,16 +16,16 @@ import com.typeassist.app.data.model.GitHubRelease
 import com.typeassist.app.data.repository.UpdateRepository
 import com.typeassist.app.ui.AppTheme
 import com.typeassist.app.ui.AppThemeMode
+import com.typeassist.app.api.HttpClients
 import com.typeassist.app.ui.ThemePalettes
 import com.typeassist.app.ui.TypeAssistApp
 import com.typeassist.app.ui.components.UpdateDialog
 import com.typeassist.app.ui.components.VersionAnnouncementDialog
 import kotlinx.coroutines.launch
-import okhttp3.OkHttpClient
 
 class MainActivity : ComponentActivity() {
 
-    private val client = OkHttpClient()
+    private val client = HttpClients.shared()
     private var updateInfoState by mutableStateOf<GitHubRelease?>(null)
     private var appThemeMode by mutableStateOf(AppThemeMode.SYSTEM)
     private var showVersionAnnouncement by mutableStateOf(false)

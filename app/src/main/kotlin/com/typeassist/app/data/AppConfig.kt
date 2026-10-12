@@ -40,7 +40,14 @@ data class AppConfig(
     var streamResponses: Boolean = true,
     var screenContextEnabled: Boolean = false,
     var screenContextChatLabels: Boolean = true,
-    var screenContextBlockedPackages: MutableList<String> = defaultBlockedScreenPackages()
+    var screenContextBlockedPackages: MutableList<String> = defaultBlockedScreenPackages(),
+    // --- Added in config version 3 (see ConfigMigrations) ---
+    /** How long processed text stays recoverable: see [HistoryManager.RETENTION_CHOICES]. */
+    var historyRetentionMinutes: Int = HistoryManager.DEFAULT_RETENTION_MINUTES,
+    /** Whose voice `.reply` copies: see [ReplyStyle.TONES]. */
+    var replyTone: String = ReplyStyle.TONE_MATCH,
+    /** How long a drafted reply is: see [ReplyStyle.LENGTHS]. */
+    var replyLength: String = ReplyStyle.LENGTH_SHORT
 ) : Serializable
 
 data class CloudflareConfig(
@@ -148,9 +155,17 @@ fun isReasoningModel(modelPath: String): Boolean {
     ).any { name.contains(it) }
 }
 
+/**
+ * Sampling parameters sent to every cloud provider. They reach the request as the provider's own
+ * fields (`temperature` / `top_p` / `max_tokens`, `generationConfig` for Gemini), which is what
+ * makes the sliders in Settings → Text generation actually change the answers.
+ *
+ * 0 for [maxTokens] means "leave the length to the provider", so no length field is sent at all.
+ */
 data class GenConfig(
-    var temperature: Double = 0.2,
-    var topP: Double = 0.95
+    var temperature: Double = GenerationSettings.DEFAULT_TEMPERATURE,
+    var topP: Double = GenerationSettings.DEFAULT_TOP_P,
+    var maxTokens: Int = GenerationSettings.DEFAULT_MAX_TOKENS
 ) : Serializable
 
 data class Trigger(
@@ -184,7 +199,7 @@ fun createDefaultConfig(): AppConfig {
         savedCloudflareConfigs = mutableListOf(),
         modelPreferences = mutableListOf(),
         triggerDebounceMs = 400L,
-        generationConfig = GenConfig(temperature = 0.2, topP = 0.95),
+        generationConfig = GenerationSettings.defaults(),
         triggers = mutableListOf(
             Trigger(".ta", "Give only the most relevant and complete answer to the query. Do not explain, do not add introductions, disclaimers, or extra text. Output only the answer."),
             Trigger(".g", "Fix grammar, spelling, and punctuation. Return only the corrected text."),

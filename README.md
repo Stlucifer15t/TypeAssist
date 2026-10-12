@@ -98,10 +98,10 @@ Type a shortcut straight into any text field — Prompt AI detects it after a sh
 | `(.c: 25 * 4 + 10)` | Offline calculator (`+ - * / ^ ( ) sqrt sin cos tan log`) | → `110` |
 | `.now` / `.date` | Insert the current time / date | → `2026-10-07 14:30` |
 | `.pass` | Generate a strong random password | → `t7#Kq2!mVs9x` |
-| `.reply` | Draft a reply to the conversation on screen, in your own writing style (needs screen context) | `Sounds good, see you then .reply` |
+| `.reply` | Draft a reply to the conversation on screen, copying your own writing style (needs screen context) | `Sounds good, see you then .reply` |
 | `.sum` | Summarize what is on screen (needs screen context) | `.sum` |
 | `.ta` + `@screen` | Ask a question about what is on screen | `What does this error mean? @screen .ta` |
-| `.undo` | Revert the last change (5-minute window) | |
+| `.undo` | Revert the last change | |
 
 By default a trigger must sit at the end of the text. In **Settings → Behaviour → Triggers & text** you can **Allow triggers anywhere**, **Ignore the preceding space** (so `hello.ta` works), and change the **Global rewrite pattern** (`%` marks where the instruction goes, default `...%...`).
 
@@ -110,6 +110,8 @@ Custom commands and inline patterns are created in the **Commands** tab; every c
 **After a command runs**, a small **Accept · Reject · Retry** chip appears in the middle of the screen for a few seconds, where the keyboard is less likely to cover it: Accept keeps the result, Reject puts your original text back (the same thing `.undo` does), and Retry runs the command again. The chip never takes focus from what you are typing, and it disappears as soon as you type or move to another field. Turn it off in **Settings → Behaviour → After a reply**.
 
 **Answers stream in as they are written** with Gemini and OpenAI-compatible providers, so the text appears in the field while the model is still typing; Cloudflare and local models answer in one piece. While a stream is running the chip is a **Stop** button that cancels the request and restores your text. Streaming is on by default and can be turned off in **Settings → Behaviour → After a reply**.
+
+**Connections are kept warm.** Requests share one connection pool, so a second command to the same provider reuses the open connection instead of shaking hands again, and a dropped Wi-Fi-to-mobile handover is retried once automatically (as are 429 and 5xx replies). Retries only ever happen *before* any text has arrived: once the model has started answering, a failure is reported instead of being sent twice.
 
 ---
 
@@ -120,11 +122,11 @@ The bottom bar has five destinations:
 *   **Home** — one **switch** for the assistant, one card showing the **active provider and model**, and a prompt to enable Accessibility when it is missing. Quick actions for **Commands**, **Snippets**, **History**, **Command gallery**, **Backup** and **Try a trigger** sit directly under it, followed by example shortcuts and a link to this repository. There is no welcome banner and no activity feed: everything on the screen is something you can act on.
 *   **Commands** — your AI shortcuts, split into **Standard** (trailing triggers such as `.sum`) and **Inline** (patterns such as `(%:.ta)`). Search, add, edit and delete commands, or open the **Command gallery** to add ready-made templates (professional email, summarise, action items, and more).
 *   **Snippets** — reusable text blocks, opened by typing the snippet prefix plus a name. A snippet can hold several **variations**; when more than one exists, Prompt AI shows a picker before inserting. The prefix and the quick-save pattern are editable in **Settings → Behaviour**.
-*   **History** — the original text of everything Prompt AI processed in the last **five minutes**. Copy an entry back to the clipboard, or clear the list. Turn it off in Settings if you prefer.
+*   **History** — two tabs. **History** holds the original text of everything Prompt AI processed in the **last hour** (the window is a setting: 5 minutes to 4 hours, or any custom value). Copy an entry back to the clipboard, or clear the list. **Usage** shows requests and tokens per provider, for this session and in total. Turn retention off in Settings if you prefer.
 *   **Settings** — grouped by topic rather than by tab:
-    *   **Assistant** — **Provider & model** (the provider setup described above, plus **Local model**), **Behaviour** (replies, triggers, history, timeouts, screen context) and **Appearance** (theme, floating controls, indicator style, colour and size).
+    *   **Assistant** — **Provider & model** (the provider setup described above, plus **Local model**), **Behaviour** (replies, triggers, history, timeouts, screen context and the drafted-reply tone and length), **Text generation** (temperature, top-p and the answer-length limit, with presets) and **Appearance** (theme, floating controls, indicator style, colour and size).
     *   **Reliability** — **Permissions & service health**, with the live status of the accessibility service and every optional setting that keeps it running.
-    *   **Data** — **Backup & restore**, including the advanced raw-JSON editor.
+    *   **Data** — **Token usage** (requests and tokens per provider) and **Backup & restore**, including the advanced raw-JSON editor.
     *   **Learn & about** — **User guide** (generated from your own commands, so it always matches this device), **Tips & examples**, the version and update check, an **Interface preview** of the floating surfaces, and the source link.
 
 Back returns to the screen a detour was started from: from **Provider & model** it goes back to Settings, from Settings it goes to Home.
@@ -153,7 +155,9 @@ The installed version shows a short **release announcement once**, on the first 
 *   **Indicator colour** — quick-swatch presets, a hex field for any `#RRGGBB` colour, and a hue/saturation/brightness mixer. Chosen colours are kept opaque. The neon ring uses its own locked animated spectrum (electric blue/cyan/violet/magenta/pink) and is not recoloured.
 *   **Indicator size** — 50 %–200 %; 100 % is the original size and every style scales.
 
-**Other options in Settings → Behaviour:** **Save processed text to history**, **Preview longer responses** (responses over 15 words are shown for review before insertion), the **Replies** settings (accept/reject chip, streaming), the **Screen context** section (opt-in screen reading with its app blocklist), a **Network timeout** of 10–120 seconds, and an **App updates** card with your version and a manual **Check** button.
+**Other options in Settings → Behaviour:** **Save processed text to history** with its **Keep for** window (5 minutes, 30 minutes, 1 hour, 4 hours or a custom number of minutes), **Preview longer responses** (responses over 15 words are shown for review before insertion), the **Replies** settings (accept/reject chip, streaming), the **Drafted replies** section (**tone** — match me, warm, formal, direct — and **length** — short, medium, detailed — both sent with `.reply`), the **Screen context** section (opt-in screen reading with its app blocklist), a **Network timeout** of 10–120 seconds, and an **App updates** card with your version and a manual **Check** button.
+
+**Settings → Text generation** holds the sampling values sent to every provider: a **Precise / Balanced / Creative** starting point, then **Temperature** (0–2), **top-p** (0.05–1.0) and a **Max tokens** limit (0 means "let the provider decide"). The card at the bottom shows exactly which fields are sent, and Gemini, OpenAI-compatible endpoints and Cloudflare Workers AI all receive them.
 
 ---
 
@@ -164,7 +168,8 @@ The installed version shows a short **release announcement once**, on the first 
 *   **Nothing runs when paused.** The assistant switch on the Home screen disables processing entirely.
 *   **Screen context is opt-in.** `.reply`, `.sum` and `.ta` with `@screen` send the visible text of the current screen to your AI provider — and only those commands do. Screen reading is off until you enable it in **Settings → Behaviour → Screen context**, never happens in the background, and is skipped entirely in the apps on your blocklist (banking, payment and password-manager packages are preloaded). For `.reply`, messages on the right side of the screen count as yours (marked `Me:`), and the reply copies your style from them.
 *   **Local storage.** API keys and settings live in the app's private preferences. Saved profile rows mask keys, and the raw-JSON editor warns that it contains them.
-*   **Short-lived history.** Processed text is kept in memory for five minutes only, and can be cleared at any time.
+*   **Short-lived history.** Processed text is kept in memory for one hour by default (the window is yours to change, between 5 minutes and 24 hours), never written to storage, and can be cleared at any time.
+*   **Token counting is just counting.** The Usage tab stores only numbers — how many requests and tokens per provider and model. No text from any conversation, and nothing about the app it was typed into, is kept.
 *   **Offline option.** With the Local LLM provider, your text never leaves the device.
 *   **Only the permissions it needs.** Internet access for AI requests, an overlay (system alert window) for the indicator and undo button, notifications and battery-optimization access so the service survives in the background.
 

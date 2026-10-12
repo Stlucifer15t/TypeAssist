@@ -53,15 +53,19 @@ fun UpdateDialog(release: GitHubRelease, onDismiss: () -> Unit) {
  * person using the app, not for a changelog, so they stay short and concrete.
  */
 private val announcementNotes = listOf(
-    "The whole interface has been rebuilt: one deep-charcoal dark theme, a true-black AMOLED theme " +
-        "and a properly designed light theme.",
-    "A single electric-lime accent replaces the mixed indigo, teal and orange from before.",
-    "Settings is organised by topic - Assistant, Reliability, Data and Learn - with the same " +
-        "options as before and nothing hidden.",
-    "The floating chip, preview card, snippet picker and loading indicator now follow your " +
-        "appearance choice instead of your phone's night mode.",
-    "New in Settings: a preview of every floating surface, plus a guide generated from your own " +
-        "commands."
+    "Text generation settings: temperature, top-p and an answer-length limit are now sent to " +
+        "Gemini, OpenAI-compatible endpoints and Cloudflare Workers AI, with Presets if you would " +
+        "rather not think about numbers.",
+    "Requests share one connection, so a second command to the same provider starts immediately " +
+        "instead of shaking hands again, and a dropped connection is retried once on its own.",
+    ".reply now reads the conversation and copies your own wording: your messages are quoted back " +
+        "to the model, and Settings > Behaviour > Drafted replies sets the tone and the length.",
+    "History keeps processed text for an hour instead of five minutes, and the window is yours to " +
+        "choose - from five minutes up to a day.",
+    "A new Usage tab next to History shows requests and tokens per provider, for this session and " +
+        "in total, so it is obvious what each model costs you.",
+    "Connection failures now say what to do next - offline, timeout, wrong key, used-up credit, " +
+        "region block - instead of one generic error."
 )
 @Composable
 fun VersionAnnouncementDialog(

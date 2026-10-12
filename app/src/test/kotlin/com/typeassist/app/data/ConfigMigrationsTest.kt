@@ -46,6 +46,81 @@ class ConfigMigrationsTest {
         assertEquals("dots", migrated.loadingIndicatorStyle)
     }
 
+    /**
+     * The same legacy config also predates the generation sliders, the screen-aware reply settings
+     * and the longer history window, and Gson leaves all of those as null/0.
+     */
+    @Test
+    fun legacyConfigsGetUsableGenerationAndReplySettings() {
+        val migrated = ConfigMigrations.apply(legacyConfig())
+
+        assertEquals(GenerationSettings.DEFAULT_TEMPERATURE, migrated.generationConfig.temperature, 0.0001)
+        assertEquals(GenerationSettings.DEFAULT_TOP_P, migrated.generationConfig.topP, 0.0001)
+        assertEquals(0, migrated.generationConfig.maxTokens)
+
+        // One hour, not the five minutes the old build hardcoded.
+        assertEquals(HistoryManager.DEFAULT_RETENTION_MINUTES, migrated.historyRetentionMinutes)
+        assertEquals(ReplyStyle.TONE_MATCH, migrated.replyTone)
+        assertEquals(ReplyStyle.LENGTH_SHORT, migrated.replyLength)
+    }
+
+    @Test
+    fun aMissingGenerationObjectIsRebuilt() {
+        val config = Gson().fromJson(
+            """{"configVersion":$CURRENT_CONFIG_VERSION,"generationConfig":null}""",
+            AppConfig::class.java
+        )
+
+        val migrated = ConfigMigrations.apply(config)
+
+        assertEquals(GenerationSettings.defaults(), migrated.generationConfig)
+    }
+
+    @Test
+    fun storedValuesOutOfRangeAreRepairedInsteadOfBeingSent() {
+        val config = Gson().fromJson(
+            """
+            {
+              "configVersion": $CURRENT_CONFIG_VERSION,
+              "generationConfig": {"temperature": 42.0, "topP": -1.0, "maxTokens": -7},
+              "historyRetentionMinutes": -3,
+              "replyTone": "shouty",
+              "replyLength": "epic"
+            }
+            """.trimIndent(),
+            AppConfig::class.java
+        )
+
+        val migrated = ConfigMigrations.apply(config)
+
+        assertEquals(GenerationSettings.MAX_TEMPERATURE, migrated.generationConfig.temperature, 0.0001)
+        assertEquals(GenerationSettings.MIN_TOP_P, migrated.generationConfig.topP, 0.0001)
+        assertEquals(0, migrated.generationConfig.maxTokens)
+        assertEquals(HistoryManager.DEFAULT_RETENTION_MINUTES, migrated.historyRetentionMinutes)
+        assertEquals(ReplyStyle.TONE_MATCH, migrated.replyTone)
+        assertEquals(ReplyStyle.LENGTH_SHORT, migrated.replyLength)
+    }
+
+    @Test
+    fun chosenGenerationAndReplySettingsSurviveAMigration() {
+        val config = createDefaultConfig().copy(
+            configVersion = CURRENT_CONFIG_VERSION,
+            generationConfig = GenConfig(temperature = 0.9, topP = 1.0, maxTokens = 512),
+            historyRetentionMinutes = 240,
+            replyTone = ReplyStyle.TONE_FORMAL,
+            replyLength = ReplyStyle.LENGTH_DETAILED
+        )
+
+        val migrated = ConfigMigrations.apply(config)
+
+        assertSame(config, migrated)
+        assertEquals(0.9, migrated.generationConfig.temperature, 0.0001)
+        assertEquals(512, migrated.generationConfig.maxTokens)
+        assertEquals(240, migrated.historyRetentionMinutes)
+        assertEquals(ReplyStyle.TONE_FORMAL, migrated.replyTone)
+        assertEquals(ReplyStyle.LENGTH_DETAILED, migrated.replyLength)
+    }
+
     @Test
     fun currentConfigsKeepTheirChosenValues() {
         val config = createDefaultConfig().copy(
