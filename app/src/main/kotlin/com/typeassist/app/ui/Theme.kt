@@ -182,6 +182,21 @@ private fun appExtraColors(resolvedMode: String): AppExtraColors = when (resolve
 }
 
 /**
+ * The app's own typeface: Nunito, bundled as four static instances (4/5/6/700) so it renders
+ * identically on every Android version the app supports - a variable font would need API 26+.
+ * Nunito is SIL Open Font License 1.1; the licence ships in assets/licenses/Nunito-OFL.txt.
+ *
+ * Weight is what carries hierarchy here, so the family has to provide each weight rather than
+ * relying on a synthetic bold.
+ */
+val AppFontFamily: FontFamily = FontFamily(
+    Font(R.font.nunito_regular, FontWeight.Normal),
+    Font(R.font.nunito_medium, FontWeight.Medium),
+    Font(R.font.nunito_semibold, FontWeight.SemiBold),
+    Font(R.font.nunito_bold, FontWeight.Bold)
+)
+
+/**
  * ============================== TYPE ==============================
  *
  * The default Material type scale is tuned for large marketing surfaces: it is loose at the top and
@@ -281,21 +296,6 @@ val AppTypography = Typography(
         lineHeight = 14.sp,
         letterSpacing = 0.3.sp
     )
-)
-
-/**
- * The app's own typeface: Nunito, bundled as four static instances (4/5/6/700) so it renders
- * identically on every Android version the app supports - a variable font would need API 26+.
- * Nunito is SIL Open Font License 1.1; the licence ships in assets/licenses/Nunito-OFL.txt.
- *
- * Weight is what carries hierarchy here, so the family has to provide each weight rather than
- * relying on a synthetic bold.
- */
-val AppFontFamily: FontFamily = FontFamily(
-    Font(R.font.nunito_regular, FontWeight.Normal),
-    Font(R.font.nunito_medium, FontWeight.Medium),
-    Font(R.font.nunito_semibold, FontWeight.SemiBold),
-    Font(R.font.nunito_bold, FontWeight.Bold)
 )
 
 /** Monospace is the voice of the product: every trigger, pattern and code fragment. */

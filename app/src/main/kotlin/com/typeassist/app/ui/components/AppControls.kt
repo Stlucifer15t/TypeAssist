@@ -237,6 +237,29 @@ fun AppTextField(
     textStyle: TextStyle? = null
 ) {
     val base = textStyle ?: MaterialTheme.typography.bodyLarge
+    // Declared before the call so each lambda's type is explicit: a composable lambda cannot be
+    // inferred out of a `let` return position.
+    val labelContent: (@Composable () -> Unit)? = if (label != null) {
+        { Text(label, style = MaterialTheme.typography.bodyMedium) }
+    } else {
+        null
+    }
+    val placeholderContent: (@Composable () -> Unit)? = if (placeholder != null) {
+        {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+    } else {
+        null
+    }
+    val supportingContent: (@Composable () -> Unit)? = if (supporting != null) {
+        { Text(supporting, style = MaterialTheme.typography.bodySmall) }
+    } else {
+        null
+    }
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -244,15 +267,11 @@ fun AppTextField(
         enabled = enabled,
         readOnly = readOnly,
         textStyle = if (monospace) base.copy(fontFamily = MonoFamily) else base,
-        label = label?.let { { Text(it, style = MaterialTheme.typography.bodyMedium) } },
-        placeholder = placeholder?.let {
-            { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)) }
-        },
+        label = labelContent,
+        placeholder = placeholderContent,
         leadingIcon = leadingIcon,
         trailingIcon = trailingIcon,
-        supportingText = supporting?.let {
-            { Text(it, style = MaterialTheme.typography.bodySmall) }
-        },
+        supportingText = supportingContent,
         isError = isError,
         visualTransformation = visualTransformation,
         keyboardOptions = keyboardOptions,

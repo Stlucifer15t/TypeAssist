@@ -66,6 +66,19 @@ fun AppDialog(
     iconTint: Color? = null,
     body: (@Composable ColumnScope.() -> Unit)? = null
 ) {
+    val dialogIcon: (@Composable () -> Unit)? = if (icon != null) {
+        {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint ?: MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(Sizes.iconLg)
+            )
+        }
+    } else {
+        null
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = modifier,
@@ -74,16 +87,7 @@ fun AppDialog(
         titleContentColor = MaterialTheme.colorScheme.onSurface,
         textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         tonalElevation = 0.dp,
-        icon = icon?.let { vector ->
-            {
-                Icon(
-                    imageVector = vector,
-                    contentDescription = null,
-                    tint = iconTint ?: MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(Sizes.iconLg)
-                )
-            }
-        },
+        icon = dialogIcon,
         title = {
             Text(text = title, style = MaterialTheme.typography.titleLarge)
         },

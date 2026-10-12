@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.typeassist.app.data.model.GitHubRelease
+import com.typeassist.app.ui.Spacing
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
 /**
