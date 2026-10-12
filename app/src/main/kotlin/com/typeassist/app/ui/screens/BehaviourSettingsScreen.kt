@@ -34,6 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.typeassist.app.BuildConfig
 import com.typeassist.app.api.ApiErrorFormatter
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.HistoryManager
+import com.typeassist.app.data.ReplyStyle
 import com.typeassist.app.data.repository.UpdateRepository
 import com.typeassist.app.ui.Spacing
 import com.typeassist.app.ui.components.AppCard

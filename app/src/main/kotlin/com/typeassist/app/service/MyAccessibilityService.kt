@@ -375,7 +375,7 @@ class MyAccessibilityService : AccessibilityService() {
                             } else {
                                 config.snippets.add(com.typeassist.app.data.Snippet(newTrigger, contents = mutableListOf(newContent)))
                             }
-                            prefs.edit().putString("config_json", gson.toJson(config)).apply()
+                            configPrefs.edit().putString("config_json", gson.toJson(config)).apply()
                             val cleanText = currentText.replace(fullMatch, newContent)
                             pasteText(inputNode, cleanText)
                             overlayManager.showToast("Snippet '$newTrigger' saved!")
