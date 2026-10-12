@@ -228,6 +228,7 @@ fun GuideScreen(
                     )
                     GuideItem(
                         "Usage tab",
+                        "Tokens used",
                         "Counts requests and tokens per provider, per session and in total. " +
                             "Providers that report their token counts are used as-is; the rest are " +
                             "estimated from the length of the text."
