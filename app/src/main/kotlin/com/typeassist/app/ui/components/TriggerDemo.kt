@@ -1,6 +1,8 @@
 package com.typeassist.app.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -137,7 +139,7 @@ fun TriggerDemo(modifier: Modifier = Modifier) {
         Spacer(Modifier.height(Spacing.md))
 
         Box(modifier = Modifier.heightIn(min = 42.dp)) {
-            AnimatedVisibility(
+            FadeReveal(
                 visible = working,
                 enter = fadeIn(tween(140)),
                 exit = fadeOut(tween(140))
@@ -152,7 +154,7 @@ fun TriggerDemo(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            AnimatedVisibility(
+            FadeReveal(
                 visible = output.isNotBlank(),
                 enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 4 }
             ) {
@@ -196,5 +198,24 @@ private fun DemoLegend(trigger: String, meaning: String) {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+/**
+ * Fade/slide reveal that works from any layout scope.
+ *
+ * `AnimatedVisibility` has Column- and Row-scoped overloads, and calling it inside a `Box` that is
+ * nested in a `Column` leaves the compiler with two applicable implicit receivers. This wrapper
+ * declares no receiver of its own, so the plain overload is always chosen.
+ */
+@Composable
+private fun FadeReveal(
+    visible: Boolean,
+    enter: EnterTransition = fadeIn(),
+    exit: ExitTransition = fadeOut(),
+    content: @Composable () -> Unit
+) {
+    AnimatedVisibility(visible = visible, enter = enter, exit = exit) {
+        content()
     }
 }

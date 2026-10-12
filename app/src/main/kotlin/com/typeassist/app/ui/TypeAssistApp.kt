@@ -391,10 +391,13 @@ fun TypeAssistApp(
                     onBack = { navigateTo("settings") },
                     onOpenAppearance = { navigateTo("settings/appearance") }
                 )
-                "did_you_know" -> DidYouKnowScreen(onFinished = {
-                    prefs.edit().putInt("did_you_know_version", 2).apply()
-                    navigateTo("home")
-                })
+                "did_you_know" -> DidYouKnowScreen(
+                    config = config,
+                    onFinished = {
+                        prefs.edit().putInt("did_you_know_version", 2).apply()
+                        navigateTo("home")
+                    }
+                )
                 "test" -> TestScreen(
                     config = config,
                     onStartTest = { prefs.edit().putBoolean("is_testing_active", true).apply() },
