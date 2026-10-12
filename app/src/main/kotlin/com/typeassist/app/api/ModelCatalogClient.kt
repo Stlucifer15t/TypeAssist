@@ -9,22 +9,48 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 
-/** Reads model IDs from standard OpenAI-compatible and Gemini model-list endpoints. */
-class ModelCatalogClient(private val client: OkHttpClient) {
+/**
+ * Reads model IDs from standard OpenAI-compatible and Gemini model-list endpoints.
+ *
+ * Answers are cached for [CACHE_TTL_MS], because the list is stable for minutes at a time and the
+ * model picker is opened far more often than a provider publishes a new model. Without the cache,
+ * every look at the picker waits for a round trip; with it, the second look is instant. A refresh
+ * button passes `force = true` to bypass it.
+ */
+class ModelCatalogClient(private val client: OkHttpClient = HttpClients.catalog()) {
 
-    suspend fun fetchOpenAiCompatibleModels(baseUrl: String, apiKey: String): List<String> {
+    private data class Cached(val models: List<String>, val fetchedAt: Long)
+
+    private val cache = ConcurrentHashMap<String, Cached>()
+
+    /** Models already fetched recently, if any. */
+    private fun cached(key: String): List<String>? {
+        val entry = cache[key] ?: return null
+        return if (System.currentTimeMillis() - entry.fetchedAt < CACHE_TTL_MS) entry.models else null
+    }
+
+    suspend fun fetchOpenAiCompatibleModels(
+        baseUrl: String,
+        apiKey: String,
+        force: Boolean = false
+    ): List<String> {
+        val cacheKey = "openai|$baseUrl"
+        if (!force) cached(cacheKey)?.let { return it }
         val url = modelsEndpoint(baseUrl)
         val requestBuilder = Request.Builder().url(url).get()
         if (apiKey.isNotBlank()) {
             requestBuilder.header("Authorization", "Bearer ${apiKey.trim()}")
         }
         return fetch(requestBuilder.build(), ModelCatalogParser::parseOpenAiCompatibleModels)
+            .also { cache[cacheKey] = Cached(it, System.currentTimeMillis()) }
     }
 
-    suspend fun fetchGeminiModels(apiKey: String): List<String> {
+    suspend fun fetchGeminiModels(apiKey: String, force: Boolean = false): List<String> {
         if (apiKey.isBlank()) throw IllegalArgumentException("Enter your Gemini API key first.")
+        val cacheKey = "gemini"
+        if (!force) cached(cacheKey)?.let { return it }
         val url = "https://generativelanguage.googleapis.com/v1beta/models".toHttpUrlOrNull()
             ?.newBuilder()
             ?.addQueryParameter("key", apiKey.trim())
@@ -32,14 +58,12 @@ class ModelCatalogClient(private val client: OkHttpClient) {
             ?: throw IOException("Could not build the Gemini model-list URL.")
         val request = Request.Builder().url(url).get().build()
         return fetch(request, ModelCatalogParser::parseGeminiModels)
+            .also { cache[cacheKey] = Cached(it, System.currentTimeMillis()) }
     }
 
     private suspend fun fetch(request: Request, parse: (String) -> List<String>): List<String> =
         withContext(Dispatchers.IO) {
-            client.newBuilder()
-                .callTimeout(25, TimeUnit.SECONDS)
-                .build()
-                .newCall(request)
+            client.newCall(request)
                 .execute()
                 .use { response ->
                     val body = response.body?.string().orEmpty()
@@ -59,6 +83,9 @@ class ModelCatalogClient(private val client: OkHttpClient) {
         }
 
     companion object {
+        /** Long enough to make the picker feel instant, short enough to notice a new model. */
+        const val CACHE_TTL_MS: Long = 10 * 60 * 1000L
+
         /**
          * Accepts a base URL, a `/models` URL, or the existing chat-completions URL.
          * Query parameters are intentionally omitted so API keys are only sent in headers.

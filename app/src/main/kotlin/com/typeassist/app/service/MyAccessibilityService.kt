@@ -21,10 +21,14 @@ import com.typeassist.app.api.ApiErrorFormatter
 import com.typeassist.app.api.CloudflareApiClient
 import com.typeassist.app.api.CustomApiClient
 import com.typeassist.app.api.GeminiApiClient
+import com.typeassist.app.api.HttpClients
 import com.typeassist.app.api.LocalLlmClient
+import com.typeassist.app.api.ScreenPrompts
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.HistoryManager
+import com.typeassist.app.data.UsageStore
+import com.typeassist.app.data.UsageTracker
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.StreamThrottle
 import com.typeassist.app.ui.ThemePalettes
@@ -57,24 +61,7 @@ class MyAccessibilityService : AccessibilityService() {
         /** Marker that makes a normal `.ta` question refer to what is on screen. */
         private const val SCREEN_ASK_MARKER = "@screen"
 
-        private const val SCREEN_REPLY_PROMPT =
-            "You are drafting a reply in an ongoing conversation for the user. The screen text is " +
-                "provided. Lines starting with Me: were written by the user, and lines starting with " +
-                "Them: were written by the other person. Copy the user's own writing style from the " +
-                "Me: lines: their language, vocabulary, sentence length, punctuation, capitalisation, " +
-                "emoji use and formality. If there are no Me: lines, keep the reply short and plain and " +
-                "match the conversation's language and tone. Do not use exaggerated, flowery or robotic " +
-                "phrasing (for example \"I hope this finds you well\", \"absolutely delighted\" or " +
-                "\"delve into\"), and do not over-explain. Write only the reply message, with no quotes, " +
-                "labels or explanations."
 
-        private const val SCREEN_SUMMARY_PROMPT =
-            "Summarize the content on the screen into a few short bullet points. Keep only the " +
-                "important information. Return only the summary."
-
-        private const val SCREEN_ANSWER_PROMPT =
-            "Answer the user's question using only the screen content provided. Be concise and " +
-                "return only the answer."
     }
 
     external fun stringFromJNI(): String
@@ -83,7 +70,17 @@ class MyAccessibilityService : AccessibilityService() {
     external fun stopGenerationNative()
     external fun unloadModel()
 
-    private val client = OkHttpClient()
+    private val client = HttpClients.shared()
+
+    /**
+     * One Gson instance for the whole service: each new instance would rebuild every type adapter
+     * for [AppConfig] and its nested lists, on the path between the user's keystroke and the
+     * request going out.
+     */
+    private val gson = com.google.gson.Gson()
+
+    /** The app's preferences, resolved once instead of by every accessibility event. */
+    private val configPrefs by lazy { getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE) }
     private val geminiApiClient = GeminiApiClient(client)
     private val cloudflareApiClient = CloudflareApiClient(client)
     private val customApiClient = CustomApiClient(client)
@@ -143,6 +140,9 @@ class MyAccessibilityService : AccessibilityService() {
             isSnippetSelectionVisible = false 
         }
         startPersistentNotification()
+        // Token totals are read back here so the usage tab shows the stored history, not just the
+        // requests made since the phone was last restarted.
+        UsageTracker.load(UsageStore(this).load())
         Log.d(TAG, "Service Connected")
     }
 
@@ -193,7 +193,7 @@ class MyAccessibilityService : AccessibilityService() {
      */
     private fun overlayThemeMode(): String {
         val stored = try {
-            getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE).getString("theme_mode", null)
+            configPrefs.getString("theme_mode", null)
         } catch (e: Exception) {
             null
         }
@@ -204,8 +204,7 @@ class MyAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         if (event.packageName?.toString() == packageName) {
-            val prefs = getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
-            val isTesting = prefs.getBoolean("is_testing_active", false)
+            val isTesting = configPrefs.getBoolean("is_testing_active", false)
             if (!isTesting) return
         }
 
@@ -248,15 +247,13 @@ class MyAccessibilityService : AccessibilityService() {
             // away, then carry on parsing what they typed.
             onUserInterruption()
 
-            val prefs = getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
-            val configJson = prefs.getString("config_json", null)
+            val configJson = configPrefs.getString("config_json", null)
             if (configJson == null) {
                 Log.e(TAG, "config_json is null!")
                 return
             }
 
             try {
-                val gson = com.google.gson.GsonBuilder().create()
                 // Gson skips constructors, so fields that did not exist when the config was saved
                 // arrive as zero values. Restore their defaults before anything reads them.
                 val config = ConfigMigrations.apply(
@@ -291,7 +288,7 @@ class MyAccessibilityService : AccessibilityService() {
 
                         if (contextText.isNotBlank() && instruction.isNotBlank()) {
                             originalTextCache = currentText
-                            if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+                            if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
                             lastNode = inputNode
                             undoCacheTimestamp = System.currentTimeMillis()
 
@@ -378,7 +375,7 @@ class MyAccessibilityService : AccessibilityService() {
                             } else {
                                 config.snippets.add(com.typeassist.app.data.Snippet(newTrigger, contents = mutableListOf(newContent)))
                             }
-                            prefs.edit().putString("config_json", gson.toJson(config)).apply()
+                            configPrefs.edit().putString("config_json", gson.toJson(config)).apply()
                             val cleanText = currentText.replace(fullMatch, newContent)
                             pasteText(inputNode, cleanText)
                             overlayManager.showToast("Snippet '$newTrigger' saved!")
@@ -391,7 +388,7 @@ class MyAccessibilityService : AccessibilityService() {
                 findBalancedCommand(currentText, "(.c:")?.let { (fullMatch, expr) ->
                     val result = com.typeassist.app.utils.UtilityBelt.evaluateMath(expr)
                     originalTextCache = currentText
-                    if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+                    if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
                     lastNode = inputNode
                     undoCacheTimestamp = System.currentTimeMillis()
                     
@@ -419,7 +416,7 @@ class MyAccessibilityService : AccessibilityService() {
                          if (config.allowTriggerAnywhere || isAtEnd) {
                              val result = uAction()
                              originalTextCache = currentText
-                             if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+                             if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
                              lastNode = inputNode
                              undoCacheTimestamp = System.currentTimeMillis()
                              
@@ -463,7 +460,7 @@ class MyAccessibilityService : AccessibilityService() {
                             Log.d(TAG, "Inline Command Match: $inlinePattern | User Prompt: $userPrompt")
 
                             originalTextCache = currentText
-                            if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+                            if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
                             lastNode = inputNode
                             undoCacheTimestamp = System.currentTimeMillis()
 
@@ -499,7 +496,7 @@ class MyAccessibilityService : AccessibilityService() {
                                 originalTextCache = textToProcess
                                 lastNode = inputNode
                                 undoCacheTimestamp = System.currentTimeMillis()
-                                if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+                                if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
 
                                 executeAiCommand(config, prompt, textToProcess, inputNode, textToProcess) { aiText ->
                                     // Keep whatever the user wrote after the trigger.
@@ -616,6 +613,7 @@ class MyAccessibilityService : AccessibilityService() {
                 overlayManager.hideLoading()
                 result.onSuccess { aiText ->
                     Log.d(TAG, "AI Success: ${aiText.take(50)}...")
+                    recordUsage(config, lastCommand?.prompt.orEmpty(), lastCommand?.userText.orEmpty(), aiText)
                     if (node != null && node.refresh()) {
                         processAiResult(config, node, aiText, render)
                     } else {
@@ -636,6 +634,35 @@ class MyAccessibilityService : AccessibilityService() {
         else -> geminiApiClient
     }
 
+    /**
+     * Counts what one finished command used, for the token-usage tab. The provider's own numbers are
+     * used when it reported them; otherwise the tracker estimates from the text that was sent and
+     * received. Only counters are stored — never the text.
+     */
+    private fun recordUsage(config: AppConfig, prompt: String, userText: String, answer: String) {
+        try {
+            UsageTracker.record(
+                provider = config.provider,
+                model = usageModelName(config),
+                promptText = prompt + "\n" + userText,
+                answerText = answer,
+                reported = providerFor(config).reportedUsage()
+            )
+            UsageStore(this).save(UsageTracker.dump())
+        } catch (e: Exception) {
+            // Counting is never worth failing a command over.
+            Log.w(TAG, "Could not record token usage: ${e.message}")
+        }
+    }
+
+    /** The model ID the usage rows are grouped under, per provider. */
+    private fun usageModelName(config: AppConfig): String = when (config.provider) {
+        "custom" -> config.customApiConfig.model
+        "cloudflare" -> config.cloudflareConfig.model
+        "local" -> config.localLlmConfig.modelPath
+        else -> config.model
+    }
+
     // --- Screen-aware commands ----------------------------------------------------------------
 
     /**
@@ -654,21 +681,25 @@ class MyAccessibilityService : AccessibilityService() {
         val asksAboutScreen = askIndex >= 0 && currentText.contains(SCREEN_ASK_MARKER, ignoreCase = true)
 
         val instruction: String
-        val prompt: String
+        var prompt: String
+        // For .reply the instruction is part of the system prompt (it has priority over the tone
+        // rules), so it is not repeated in the user turn.
+        var instructionCarriedByPrompt = false
         when {
             replyIndex >= 0 -> {
                 instruction = currentText.substring(0, replyIndex).trim()
-                prompt = SCREEN_REPLY_PROMPT
+                prompt = ScreenPrompts.reply(config, instruction)
+                instructionCarriedByPrompt = true
             }
             summaryIndex >= 0 -> {
                 instruction = currentText.substring(0, summaryIndex).trim()
-                prompt = SCREEN_SUMMARY_PROMPT
+                prompt = ScreenPrompts.summary(config)
             }
             asksAboutScreen -> {
                 instruction = currentText.substring(0, askIndex)
                     .replace(SCREEN_ASK_MARKER, "", ignoreCase = true)
                     .trim()
-                prompt = SCREEN_ANSWER_PROMPT
+                prompt = ScreenPrompts.answer(config)
             }
             else -> return false
         }
@@ -697,9 +728,15 @@ class MyAccessibilityService : AccessibilityService() {
             return true
         }
 
+        // .reply is rewritten with the user's own messages quoted back at the model: the rules say
+        // "copy the Me: lines", and a short sample of them makes that instruction concrete.
+        if (replyIndex >= 0) {
+            prompt = ScreenPrompts.reply(config, instruction, ScreenPrompts.voiceSample(screenContext))
+        }
+
         val userText = buildString {
             append(screenContext)
-            if (instruction.isNotBlank()) {
+            if (instruction.isNotBlank() && !instructionCarriedByPrompt) {
                 append("\n\n")
                 append("Additional instruction: ")
                 append(instruction)
@@ -707,7 +744,7 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         originalTextCache = currentText
-        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache)
+        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
         lastNode = inputNode
         undoCacheTimestamp = System.currentTimeMillis()
 
@@ -756,6 +793,7 @@ class MyAccessibilityService : AccessibilityService() {
 
             result.onSuccess { fullText ->
                 streamBuffer.setLength(0)
+                recordUsage(config, lastCommand?.prompt.orEmpty(), lastCommand?.userText.orEmpty(), fullText)
                 if (node.refresh()) {
                     processAiResult(config, node, fullText, render)
                 } else {

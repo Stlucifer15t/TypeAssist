@@ -1,6 +1,7 @@
 package com.typeassist.app.api
 
 import com.typeassist.app.data.AppConfig
+import com.typeassist.app.data.TokenUsage
 
 /** Handle to a request that is already streaming, so the caller can abort it. */
 fun interface AiStream {
@@ -8,6 +9,14 @@ fun interface AiStream {
 }
 
 interface AiProvider {
+
+    /**
+     * Token counts the provider reported for the most recent request, or null when it did not
+     * report any (streaming answers, and providers that stay silent). The service uses these for
+     * the usage screen and falls back to an estimate when they are missing.
+     */
+    fun reportedUsage(): TokenUsage? = null
+
     fun generateResponse(
         prompt: String,
         userText: String,

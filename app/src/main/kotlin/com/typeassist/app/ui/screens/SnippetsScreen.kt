@@ -1,279 +1,359 @@
 package com.typeassist.app.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.Snippet
+import com.typeassist.app.ui.MonoFamily
+import com.typeassist.app.ui.Spacing
+import com.typeassist.app.ui.components.AppScaffold
+import com.typeassist.app.ui.components.AppSearchField
+import com.typeassist.app.ui.components.AppSheet
+import com.typeassist.app.ui.components.AppTextField
+import com.typeassist.app.ui.components.AppTopBar
+import com.typeassist.app.ui.components.CardTone
+import com.typeassist.app.ui.components.ConfirmDialog
 import com.typeassist.app.ui.components.EmptyState
-import com.typeassist.app.ui.components.PageHeading
+import com.typeassist.app.ui.components.GhostButton
+import com.typeassist.app.ui.components.GroupCard
+import com.typeassist.app.ui.components.MonoChip
+import com.typeassist.app.ui.components.NoticeCard
+import com.typeassist.app.ui.components.NoticeTone
+import com.typeassist.app.ui.components.PrimaryButton
+import com.typeassist.app.ui.components.RowDivider
+import com.typeassist.app.ui.components.ScreenIntro
+import com.typeassist.app.ui.components.SectionHeader
+import com.typeassist.app.ui.components.SheetActions
+import com.typeassist.app.ui.components.SheetHeader
+import com.typeassist.app.ui.components.SmallButton
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * ============================== SNIPPETS ==============================
+ *
+ * Saved text with a trigger. A snippet can hold several variations; the picker that appears while
+ * typing lets you choose between them, which is why the editor is built around a variation list
+ * rather than one big text box.
+ */
 @Composable
-fun SnippetsScreen(config: AppConfig, onSave: (AppConfig) -> Unit, onBack: () -> Unit) {
-    var showEditDialog by remember { mutableStateOf(false) }
-    var tTrigger by remember { mutableStateOf("") }
-    var tContents by remember { mutableStateOf(mutableStateListOf<String>()) }
-    
-    var originalTrigger by remember { mutableStateOf<String?>(null) }
-    var snippetToDelete by remember { mutableStateOf<Snippet?>(null) }
-    
+fun SnippetsScreen(
+    config: AppConfig,
+    onSave: (AppConfig) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    var editorOpen by remember { mutableStateOf(false) }
+    var editingTrigger by remember { mutableStateOf<String?>(null) }
+    var draftTrigger by remember { mutableStateOf("") }
+    val draftVariations = remember { mutableStateListOf<String>() }
+    var pendingDelete by remember { mutableStateOf<Snippet?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var isSortAlphabetical by remember { mutableStateOf(false) }
-    
-    val snippets = config.snippets ?: mutableListOf()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val filteredSnippets = remember(snippets, searchQuery, isSortAlphabetical) {
-        val filtered = snippets.filter { s ->
-            s.trigger.contains(searchQuery, ignoreCase = true) || 
-            s.contents.any { it.contains(searchQuery, ignoreCase = true) }
+    var sortAlphabetical by remember { mutableStateOf(false) }
+
+    val snippets = config.snippets.orEmpty()
+    val visible = remember(snippets, searchQuery, sortAlphabetical) {
+        val filtered = snippets.filter { snippet ->
+            snippet.trigger.contains(searchQuery, ignoreCase = true) ||
+                snippet.contents.any { it.contains(searchQuery, ignoreCase = true) }
         }
-        if (isSortAlphabetical) {
-            filtered.sortedBy { it.trigger.lowercase() }
-        } else {
-            filtered
+        if (sortAlphabetical) filtered.sortedBy { it.trigger.lowercase() } else filtered
+    }
+
+    fun openEditor(trigger: String, contents: List<String>) {
+        draftTrigger = trigger
+        draftVariations.clear()
+        draftVariations.addAll(contents.ifEmpty { listOf("") })
+        editingTrigger = trigger.ifEmpty { null }
+        editorOpen = true
+    }
+
+    AppScaffold(
+        topBar = {
+            AppTopBar(
+                title = "Snippets",
+                onBack = onBack,
+                actions = {
+                    IconButton(onClick = { sortAlphabetical = !sortAlphabetical }) {
+                        Icon(
+                            imageVector = Icons.Default.Sort,
+                            contentDescription = if (sortAlphabetical) "Sort: A to Z" else "Sort: newest first",
+                            tint = if (sortAlphabetical) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            )
+        },
+        floatingAction = {
+            ExtendedFloatingActionButton(
+                onClick = { openEditor("", emptyList()) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shape = MaterialTheme.shapes.medium,
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("New snippet", style = MaterialTheme.typography.labelLarge) }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(
+                start = Spacing.screen,
+                end = Spacing.screen,
+                top = Spacing.sm,
+                bottom = 96.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            item {
+                Column {
+                    ScreenIntro(
+                        "Type a trigger and it expands into saved text - addresses, signatures, " +
+                            "replies you send often."
+                    )
+                    Spacer(Modifier.height(Spacing.md))
+                    NoticeCard(
+                        title = "Two ways to expand",
+                        message = "Type ${config.snippetTriggerPrefix}name to insert a snippet, or " +
+                            "(.save:name:content) to save one without leaving the app you are in.",
+                        tone = NoticeTone.Info
+                    )
+                    Spacer(Modifier.height(Spacing.md))
+                    AppSearchField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = "Search snippets"
+                    )
+                }
+            }
+
+            item {
+                SectionHeader(
+                    title = "Saved snippets",
+                    description = when {
+                        searchQuery.isNotBlank() -> "${visible.size} matching"
+                        visible.isEmpty() -> "None yet"
+                        else -> "${visible.size} saved"
+                    }
+                )
+            }
+
+            if (visible.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Default.BookmarkBorder,
+                        title = if (searchQuery.isBlank()) "No snippets yet" else "Nothing matched",
+                        description = if (searchQuery.isBlank()) {
+                            "Save text you reuse and expand it with a short trigger."
+                        } else {
+                            "Try another word, or clear the search."
+                        }
+                    )
+                }
+            } else {
+                item {
+                    GroupCard {
+                        visible.forEachIndexed { index, snippet ->
+                            SnippetRow(
+                                snippet = snippet,
+                                onEdit = {
+                                    openEditor(snippet.trigger, snippet.contents)
+                                },
+                                onDelete = { pendingDelete = snippet }
+                            )
+                            if (index != visible.lastIndex) RowDivider()
+                        }
+                    }
+                }
+            }
         }
     }
 
-    val view = LocalView.current
-    val primaryColor = MaterialTheme.colorScheme.primary
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = { 
-            TopAppBar(
-                title = { Text("Snippets") }, 
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Back") } },
-                actions = {
-                    IconButton(onClick = { isSortAlphabetical = !isSortAlphabetical }) {
-                        Icon(
-                            Icons.Default.Sort,
-                            contentDescription = "Toggle Sort",
-                            tint = if (isSortAlphabetical) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface, titleContentColor = MaterialTheme.colorScheme.onSurface, navigationIconContentColor = MaterialTheme.colorScheme.onSurface)
-            ) 
-        },
-        floatingActionButtonPosition = FabPosition.End,
-        floatingActionButton = { 
-            FloatingActionButton(
-                onClick = { 
-                    tTrigger = ""
-                    tContents.clear()
-                    tContents.add("")
-                    originalTrigger = null
-                    showEditDialog = true 
-                }, 
-                containerColor = MaterialTheme.colorScheme.primary
-            ) { 
-                Icon(Icons.Default.Add, "Add New Snippet") 
-            } 
-        }
-    ) { p ->
-        Column(modifier = Modifier.padding(p)) {
-            PageHeading(
-                title = "Your snippets",
-                description = "Store the text you reuse and expand it with a short trigger.",
-                eyebrow = "TEXT EXPANDER",
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+    if (editorOpen) {
+        AppSheet(onDismissRequest = { editorOpen = false }) {
+            SheetHeader(
+                title = if (editingTrigger == null) "New snippet" else "Edit snippet",
+                description = "Give it a trigger and one or more variations. Any variation can be chosen while typing.",
+                onClose = { editorOpen = false }
             )
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                modifier = Modifier.fillMaxWidth().padding(16.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Usage:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Text("Type '${config.snippetTriggerPrefix}' + Trigger Name to expand.", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Quick Save:", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Text("Type '(.save:name:content)' to save instantly.", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                }
-            }
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+            Spacer(Modifier.height(Spacing.lg))
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("Search snippets...") },
-                leadingIcon = { Icon(Icons.Default.Search, "Search") },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, "Clear")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
-            )
-
-            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp)) {
-                if (filteredSnippets.isEmpty()) {
-                    item {
-                        EmptyState(
-                            icon = Icons.Default.Search,
-                            title = if (searchQuery.isBlank()) "No snippets yet" else "No matching snippets",
-                            description = if (searchQuery.isBlank()) "Save reusable text and expand it with a short trigger." else "Try another search or clear the current filter."
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                AppTextField(
+                    value = draftTrigger,
+                    onValueChange = { draftTrigger = it },
+                    label = "Trigger",
+                    placeholder = "email",
+                    supporting = "Expanded by typing ${config.snippetTriggerPrefix}$draftTrigger",
+                    monospace = true
+                )
+                Spacer(Modifier.height(Spacing.lg))
+                Text(
+                    text = "Variations",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(Spacing.sm))
+                draftVariations.forEachIndexed { index, variation ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppTextField(
+                            value = variation,
+                            onValueChange = { draftVariations[index] = it },
+                            modifier = Modifier.weight(1f),
+                            label = "Variation ${index + 1}",
+                            singleLine = false,
+                            minLines = 2
                         )
-                    }
-                } else {
-                    items(filteredSnippets) { s ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp)
-                                .clickable {
-                                    tTrigger = s.trigger
-                                    tContents.clear()
-                                    tContents.addAll(s.contents)
-                                    if (tContents.isEmpty()) tContents.add("")
-                                    originalTrigger = s.trigger
-                                    showEditDialog = true
-                                },
-                            shape = MaterialTheme.shapes.large,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(s.trigger, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 16.sp)
-                                    val subText = if (s.contents.size > 1) "${s.contents.size} variations" else if (s.contents.isNotEmpty()) s.contents[0] else ""
-                                    Text(subText, maxLines = 1, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                                IconButton(onClick = { snippetToDelete = s }) {
-                                    Icon(Icons.Default.Delete, "Delete", tint = MaterialTheme.colorScheme.error)
-                                }
+                        if (draftVariations.size > 1) {
+                            IconButton(onClick = { draftVariations.removeAt(index) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Remove variation",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
+                    Spacer(Modifier.height(Spacing.sm))
                 }
-                item { Spacer(modifier = Modifier.height(24.dp)) }
+                SmallButton(text = "Add variation", onClick = { draftVariations.add("") })
+            }
+            SheetActions {
+                PrimaryButton(
+                    text = "Save",
+                    onClick = {
+                        val contents = draftVariations.filter { it.isNotBlank() }.toMutableList()
+                        val trigger = draftTrigger.trim()
+                        val existing = snippets.toMutableList()
+                        val duplicate = trigger != editingTrigger && existing.any { it.trigger == trigger }
+                        when {
+                            trigger.isBlank() || contents.isEmpty() -> Unit
+                            duplicate -> Toast.makeText(
+                                context,
+                                "A snippet called “$trigger” already exists.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            else -> {
+                                val updated = existing.toMutableList().apply {
+                                    editingTrigger?.let { original -> removeIf { it.trigger == original } }
+                                    removeIf { it.trigger == trigger }
+                                    add(Snippet(trigger, contents = contents))
+                                }
+                                onSave(config.copy(snippets = updated))
+                                editorOpen = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = draftTrigger.isNotBlank() && draftVariations.any { it.isNotBlank() }
+                )
+                GhostButton(text = "Cancel", onClick = { editorOpen = false })
             }
         }
+    }
 
-        if (showEditDialog) {
-            AlertDialog(
-                onDismissRequest = { showEditDialog = false },
-                title = { Text(if (originalTrigger == null) "New Snippet" else "Edit Snippet") },
-                text = {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = tTrigger, 
-                            onValueChange = { tTrigger = it }, 
-                            label = { Text("Trigger Name (e.g. email)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text("Variations:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        
-                        Box(modifier = Modifier.weight(1f, fill = false).heightIn(max = 300.dp)) {
-                            LazyColumn {
-                                itemsIndexed(tContents.toList()) { index, content ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    ) {
-                                        OutlinedTextField(
-                                            value = content,
-                                            onValueChange = { tContents[index] = it },
-                                            label = { Text("Variation ${index + 1}") },
-                                            modifier = Modifier.weight(1f),
-                                            minLines = 1
-                                        )
-                                        if (tContents.size > 1) {
-                                            IconButton(onClick = { tContents.removeAt(index) }) {
-                                                Icon(Icons.Default.Close, "Remove", tint = MaterialTheme.colorScheme.error)
-                                            }
-                                        }
-                                    }
-                                }
-                                item {
-                                    TextButton(
-                                        onClick = { tContents.add("") }
-                                    ) {
-                                        Icon(Icons.Default.Add, "Add")
-                                        Spacer(Modifier.width(8.dp))
-                                        Text("Add Variation")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = {
-                        val validContents = tContents.filter { it.isNotBlank() }.toMutableList()
-                        if (tTrigger.isNotBlank() && validContents.isNotEmpty()) {
-                            val n = snippets.toMutableList()
+    pendingDelete?.let { target ->
+        ConfirmDialog(
+            title = "Delete “${target.trigger}”?",
+            message = "This snippet and all of its variations are removed.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = {
+                onSave(
+                    config.copy(snippets = snippets.toMutableList().apply { remove(target) })
+                )
+                pendingDelete = null
+            },
+            onDismiss = { pendingDelete = null }
+        )
+    }
+}
 
-                            // Check for duplicate trigger if creating NEW snippet OR changing trigger of existing one
-                            if (tTrigger != originalTrigger && n.any { it.trigger == tTrigger }) {
-                                Toast.makeText(context, "Snippet '$tTrigger' already exists!", Toast.LENGTH_SHORT).show()
-                                return@Button
-                            }
-
-                            if (originalTrigger != null) n.removeIf { it.trigger == originalTrigger }
-                            n.removeIf { it.trigger == tTrigger }
-                            n.add(Snippet(tTrigger, contents = validContents))
-                            onSave(config.copy(snippets = n))
-                            showEditDialog = false
-                        }
-                    }) { Text("Save") }
-                },
-                dismissButton = { 
-                    TextButton(onClick = { showEditDialog = false }) { Text("Cancel") } 
+@Composable
+private fun SnippetRow(
+    snippet: Snippet,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = Spacing.rowStart, end = Spacing.xs, top = Spacing.sm, bottom = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onEdit() }
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = snippet.trigger,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontFamily = MonoFamily,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (snippet.contents.size > 1) {
+                    Spacer(Modifier.width(Spacing.sm))
+                    MonoChip(text = "${snippet.contents.size} variations", tone = CardTone.Muted)
                 }
-            )
+            }
+            val preview = snippet.contents.firstOrNull().orEmpty()
+            if (preview.isNotBlank()) {
+                Spacer(Modifier.height(Spacing.xxs))
+                Text(
+                    text = preview,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+            }
         }
-
-        if (snippetToDelete != null) {
-            AlertDialog(
-                onDismissRequest = { snippetToDelete = null },
-                title = { Text("Delete Snippet?") },
-                text = { Text("Are you sure you want to delete '${snippetToDelete?.trigger}'?") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            val n = snippets.toMutableList()
-                            n.remove(snippetToDelete)
-                            onSave(config.copy(snippets = n))
-                            snippetToDelete = null
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) { Text("Delete") }
-                },
-                dismissButton = { 
-                    TextButton(onClick = { snippetToDelete = null }) { Text("Cancel") } 
-                }
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Delete snippet",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

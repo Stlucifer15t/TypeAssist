@@ -23,6 +23,15 @@ object LoadingIndicatorStyle {
         0xFFFF2A6D.toInt()  // Hot pink
     )
 
+    /**
+     * The style id from a stored value of any shape (older configs stored it untyped, and Gson can
+     * hand back null). Anything unknown or blank is "classic", the same rule [sanitize] applies.
+     */
+    fun styleIdOf(stored: Any?): String {
+        val raw = stored as? String
+        return if (raw.isNullOrBlank()) "classic" else raw
+    }
+
     /** Neon uses its own vivid palette; other styles use the user's selected colour. */
     fun effectiveColor(style: String, picked: Int): Int =
         if (style == "neon") NEON_PALETTE.first() else sanitizeColor(picked)
@@ -31,15 +40,18 @@ object LoadingIndicatorStyle {
     const val MIN_SIZE_PERCENT: Int = 50
     const val MAX_SIZE_PERCENT: Int = 200
 
-    /** Swatches offered in Settings, plus a "pick your own" path for anything else. */
+    /**
+     * Swatches offered in Settings, plus a "pick your own" path for anything else. White stays first
+     * (it is the shipped default), then the app's lime accent and a small, useful spread of hues.
+     */
     val PRESET_COLORS: List<Int> = listOf(
-        0xFFFFFFFF.toInt(), // White
-        0xFF818CF8.toInt(), // Indigo (app accent)
+        0xFFFFFFFF.toInt(), // White - the indicator's original colour
+        0xFFCBF56A.toInt(), // Lime (app accent)
         0xFF22D3EE.toInt(), // Cyan
         0xFF4ADE80.toInt(), // Green
         0xFFFACC15.toInt(), // Amber
         0xFFFB7185.toInt(), // Rose
-        0xFFC084FC.toInt(), // Purple
+        0xFFC084FC.toInt(), // Violet
         0xFFFB923C.toInt()  // Orange
     )
 
@@ -114,8 +126,9 @@ object LoadingIndicatorStyle {
     fun sanitize(config: AppConfig): AppConfig {
         config.loadingIndicatorColor = sanitizeColor(config.loadingIndicatorColor)
         config.loadingIndicatorSizePercent = sanitizeSizePercent(config.loadingIndicatorSizePercent)
-        val style = config.loadingIndicatorStyle as String?
-        if (style.isNullOrBlank()) config.loadingIndicatorStyle = "classic"
+        if (styleIdOf(config.loadingIndicatorStyle) != config.loadingIndicatorStyle) {
+            config.loadingIndicatorStyle = styleIdOf(config.loadingIndicatorStyle)
+        }
         return config
     }
 }

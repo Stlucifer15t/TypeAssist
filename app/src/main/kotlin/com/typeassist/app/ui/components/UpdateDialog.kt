@@ -2,118 +2,113 @@ package com.typeassist.app.ui.components
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.RocketLaunch
-import androidx.compose.material3.*
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import com.typeassist.app.data.model.GitHubRelease
+import com.typeassist.app.ui.Spacing
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
-@Composable
-fun VersionAnnouncementDialog(versionName: String, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                Icons.Default.RocketLaunch,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(44.dp)
-            )
-        },
-        title = { Text("Prompt AI $versionName is here", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text("Here’s what’s new:", fontWeight = FontWeight.SemiBold)
-                Text("• The Accept · Reject · Retry chip now appears in the middle of the screen, where the keyboard is less likely to cover it.")
-                Text("• .reply copies your writing style from the messages marked Me: and avoids stiff or exaggerated wording.")
-                Text("• Dark and AMOLED black look different now. Dark is a lighter dark grey, and AMOLED is true black with near-black cards.")
-                Text("• Floating chips, the preview card and the snippet picker follow the Appearance you pick in Settings, not only your phone’s night mode.")
-                Text("• The Appearance list shows a small colour preview for each theme.")
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Get started")
-            }
-        }
-    )
-}
+/**
+ * ============================== UPDATES ==============================
+ *
+ * Two dialogs, one pattern: what changed, and one button that acts on it. Release notes are
+ * markdown from GitHub, so they are rendered as such - but inside a capped, scrollable box, so a
+ * long changelog can never push the buttons off the screen.
+ */
 
 @Composable
 fun UpdateDialog(release: GitHubRelease, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    AppDialog(
+        title = "Version ${release.tagName} is available",
+        message = "You are running an older build. Release notes are shown below.",
+        onDismiss = onDismiss,
+        confirmLabel = "View release",
+        onConfirm = {
+            onDismiss()
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl)))
+        },
+        dismissLabel = "Later"
+    ) {
+        if (release.body.isNotBlank()) {
+            ReleaseNotes(release.body)
+        }
+    }
+}
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true
-        ),
-        icon = { 
-            Icon(Icons.Default.RocketLaunch, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp)) 
-        },
-        title = { 
-            Text(text = "New Update Available!", fontWeight = FontWeight.Bold) 
-        },
-        text = {
-            Column {
-                Text("Version ${release.tagName} is now available.", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("What's New:", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(modifier = Modifier
-                    .heightIn(max = 250.dp)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                ) {
-                    MarkdownText(
-                        markdown = release.body,
-                        style = LocalTextStyle.current.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 14.sp,
-                            lineHeight = 20.sp
-                        )
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onDismiss()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(release.htmlUrl))
-                    context.startActivity(intent)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Text("View Release")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Later", color = MaterialTheme.colorScheme.onSurfaceVariant)
+/**
+ * Shown once after the app is updated to a build worth explaining. The notes are written for the
+ * person using the app, not for a changelog, so they stay short and concrete.
+ */
+private val announcementNotes = listOf(
+    "Text generation settings: temperature, top-p and an answer-length limit are now sent to " +
+        "Gemini, OpenAI-compatible endpoints and Cloudflare Workers AI, with Presets if you would " +
+        "rather not think about numbers.",
+    "Requests share one connection, so a second command to the same provider starts immediately " +
+        "instead of shaking hands again, and a dropped connection is retried once on its own.",
+    ".reply now reads the conversation and copies your own wording: your messages are quoted back " +
+        "to the model, and Settings > Behaviour > Drafted replies sets the tone and the length.",
+    "History keeps processed text for an hour instead of five minutes, and the window is yours to " +
+        "choose - from five minutes up to a day.",
+    "A new Usage tab next to History shows requests and tokens per provider, for this session and " +
+        "in total, so it is obvious what each model costs you.",
+    "Connection failures now say what to do next - offline, timeout, wrong key, used-up credit, " +
+        "region block - instead of one generic error.",
+    "Saving a provider connection no longer closes the app, and if Prompt AI ever stops " +
+        "unexpectedly it says why on the next start: the reason stays on your device, and one tap " +
+        "copies it."
+)
+@Composable
+fun VersionAnnouncementDialog(
+    versionName: String,
+    onDismiss: () -> Unit
+) {
+    AppDialog(
+        title = "Prompt AI $versionName",
+        message = null,
+        onDismiss = onDismiss,
+        confirmLabel = "Continue",
+        onConfirm = onDismiss
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            announcementNotes.forEach { change ->
+                Text(
+                    text = change,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
         }
-    )
+    }
+}
+
+@Composable
+private fun ReleaseNotes(markdown: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 280.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        MarkdownText(
+            markdown = markdown,
+            style = LocalTextStyle.current.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = MaterialTheme.typography.bodyMedium.fontSize,
+                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight
+            )
+        )
+    }
 }

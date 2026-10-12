@@ -18,14 +18,25 @@ object AppThemeMode {
 }
 
 /**
- * The neutral roles of one theme: the surfaces, backgrounds and outlines that make Light, Dark and
- * AMOLED look different. Every surface-container role is written out here, so Material 3 never
- * falls back to its built-in purple-grey baseline. That fallback is what made Dark and AMOLED look
- * the same in 4.5.0: cards, dialogs, menus and navigation bars used the `surfaceContainer*` roles,
- * which the old AMOLED scheme inherited unchanged from Dark.
+ * The visual identity: **Graphite & Electric Lime**.
  *
- * Plain ARGB values with no Compose or Android imports, so the palettes can be checked by JVM unit
- * tests and shared with the overlays, which are drawn outside the Compose tree.
+ * The app is built from two families and nothing else:
+ *
+ *  * **Graphite** - a cool, near-neutral grey ramp that carries every surface, border and panel.
+ *    Dark mode is a deep charcoal (never pure black except in AMOLED) so cards can step *up* from
+ *    the canvas instead of glowing.
+ *  * **Lime** - one accent hue, from a pale tint to a deep olive. Dark themes use the luminous
+ *    end (`lime300`) because it is read as light on dark; the light theme uses the deep end
+ *    (`lime700`) because it is read as ink on paper. Same hue, correct contrast for each. This is
+ *    why the light theme is still recognisably the same product rather than a separate design.
+ *
+ * Rules that keep it consistent:
+ *  * One accent. Emergency (error) and attention (tertiary) hues are the only other colours.
+ *  * Every surface role is written out explicitly, so Material 3 never falls back to its built-in
+ *    purple-grey baseline and Light / Dark / AMOLED are guaranteed to be three distinct designs.
+ *  * Plain ARGB values with no Compose or Android imports, so the palettes can be checked by JVM
+ *    unit tests (see `ThemePalettesTest`) and shared with the overlays, which are drawn outside the
+ *    Compose tree.
  */
 data class SurfacePalette(
     val background: Int,
@@ -45,13 +56,19 @@ data class SurfacePalette(
     val surfaceContainerHighest: Int
 )
 
-/** Colours for the floating overlays (result chip, preview card, snippet picker) in one theme. */
+/**
+ * Colours for the floating overlays (result chip, preview card, snippet picker) in one theme.
+ *
+ * These are drawn by `OverlayManager` with plain Android views, so they cannot read
+ * `MaterialTheme`; they are resolved from the stored theme instead. All of them are checked for
+ * contrast against the surface they sit on by `ThemePalettesTest`.
+ */
 data class OverlayColors(
     /** Background of the preview and snippet-picker cards. */
     val cardBackground: Int,
     /** Accent outline around those cards. */
     val cardStroke: Int,
-    /** Card titles and the Copy/Cancel buttons. */
+    /** Card titles and the primary card action. */
     val titleText: Int,
     /** Response text and snippet variations. */
     val bodyText: Int,
@@ -69,108 +86,157 @@ data class OverlayColors(
     val accent: Int
 )
 
+/**
+ * The lime hue ramp. One hue, ten stops, used deliberately: the luminous stops carry the accent in
+ * dark themes, the deep stops carry it in the light theme. Kept here (rather than in Theme.kt) so
+ * the overlay colours can use the same values without a Compose dependency.
+ */
+object LimeScale {
+    const val LIME_50 = 0xFFF7FDE8.toInt()
+    const val LIME_100 = 0xFFEDF9D4.toInt()
+    const val LIME_200 = 0xFFDDF4AE.toInt()
+    const val LIME_300 = 0xFFCBF56A.toInt()
+    const val LIME_400 = 0xFFB8E94B.toInt()
+    const val LIME_500 = 0xFFA5DC2C.toInt()
+    const val LIME_600 = 0xFF86B31C.toInt()
+    const val LIME_700 = 0xFF4F6B14.toInt()
+    const val LIME_800 = 0xFF3A4E10.toInt()
+    const val LIME_900 = 0xFF25330A.toInt()
+    const val LIME_950 = 0xFF171E06.toInt()
+}
+
+/** The graphite ramp behind every surface. Also shared with the overlays. */
+object GraphiteScale {
+    const val GRAPHITE_1000 = 0xFF000000.toInt()
+    const val GRAPHITE_975 = 0xFF070809.toInt()
+    const val GRAPHITE_950 = 0xFF0A0B0D.toInt()
+    const val GRAPHITE_925 = 0xFF0E1012.toInt()
+    const val GRAPHITE_900 = 0xFF0E0F11.toInt()
+    const val GRAPHITE_875 = 0xFF141518.toInt()
+    const val GRAPHITE_850 = 0xFF16181C.toInt()
+    const val GRAPHITE_800 = 0xFF1A1C21.toInt()
+    const val GRAPHITE_750 = 0xFF202329.toInt()
+    const val GRAPHITE_700 = 0xFF262A31.toInt()
+    const val GRAPHITE_650 = 0xFF31353D.toInt()
+    const val GRAPHITE_500 = 0xFF5A606B.toInt()
+    const val GRAPHITE_400 = 0xFF8A9099.toInt()
+    const val GRAPHITE_300 = 0xFFA7ADB8.toInt()
+    const val GRAPHITE_100 = 0xFFECEEF2.toInt()
+    const val GRAPHITE_200 = 0xFFDDDFE4.toInt()
+}
+
 object ThemePalettes {
 
-    /** Light keeps the surface tones Material 3 already drew, now written out explicitly. */
+    /**
+     * Light is paper: a warm-neutral canvas, white cards and a low-contrast container ladder that
+     * steps *down* from white. Borders do the separating, not shadows.
+     */
     val LIGHT = SurfacePalette(
-        background = 0xFFF6F7FB.toInt(),
-        onBackground = 0xFF191B25.toInt(),
+        background = 0xFFF6F7F4.toInt(),
+        onBackground = 0xFF15171A.toInt(),
         surface = 0xFFFFFFFF.toInt(),
-        onSurface = 0xFF191B25.toInt(),
-        surfaceVariant = 0xFFEEF0F6.toInt(),
-        onSurfaceVariant = 0xFF626574.toInt(),
-        outline = 0xFF85889A.toInt(),
-        outlineVariant = 0xFFD8DAE4.toInt(),
-        surfaceDim = 0xFFDED8E1.toInt(),
-        surfaceBright = 0xFFFEF7FF.toInt(),
+        onSurface = 0xFF15171A.toInt(),
+        surfaceVariant = 0xFFEDEFEA.toInt(),
+        onSurfaceVariant = 0xFF5B6169.toInt(),
+        outline = 0xFF8A9099.toInt(),
+        outlineVariant = 0xFFDDE0DA.toInt(),
+        surfaceDim = 0xFFE4E6E1.toInt(),
+        surfaceBright = 0xFFFFFFFF.toInt(),
         surfaceContainerLowest = 0xFFFFFFFF.toInt(),
-        surfaceContainerLow = 0xFFF7F2FA.toInt(),
-        surfaceContainer = 0xFFF3EDF7.toInt(),
-        surfaceContainerHigh = 0xFFECE6F0.toInt(),
-        surfaceContainerHighest = 0xFFE6E0E9.toInt()
+        surfaceContainerLow = 0xFFFAFBF8.toInt(),
+        surfaceContainer = 0xFFF4F6F1.toInt(),
+        surfaceContainerHigh = 0xFFEFF1EC.toInt(),
+        surfaceContainerHighest = 0xFFE9ECE6.toInt()
     )
 
-    /** Dark is a lifted dark grey. The old #0D1016 background was already close to black. */
+    /**
+     * Dark is deep charcoal. The canvas is deliberately a few stops off black so that raised cards,
+     * sheets and the navigation bar can be lighter than it - the classic "surface steps up" model.
+     */
     val DARK = SurfacePalette(
-        background = 0xFF14171F.toInt(),
-        onBackground = 0xFFE8E9F1.toInt(),
-        surface = 0xFF1A1E27.toInt(),
-        onSurface = 0xFFE8E9F1.toInt(),
-        surfaceVariant = 0xFF232835.toInt(),
-        onSurfaceVariant = 0xFFC2C6D3.toInt(),
-        outline = 0xFF8C91A1.toInt(),
-        outlineVariant = 0xFF3A404D.toInt(),
-        surfaceDim = 0xFF111419.toInt(),
-        surfaceBright = 0xFF373D4A.toInt(),
-        surfaceContainerLowest = 0xFF0D1015.toInt(),
-        surfaceContainerLow = 0xFF191D26.toInt(),
-        surfaceContainer = 0xFF20242E.toInt(),
-        surfaceContainerHigh = 0xFF262B36.toInt(),
-        surfaceContainerHighest = 0xFF2A2F3A.toInt()
+        background = 0xFF0E0F11.toInt(),
+        onBackground = 0xFFECEEF2.toInt(),
+        surface = 0xFF141518.toInt(),
+        onSurface = 0xFFECEEF2.toInt(),
+        surfaceVariant = 0xFF1E2026.toInt(),
+        onSurfaceVariant = 0xFFA7ADB8.toInt(),
+        outline = 0xFF5A606B.toInt(),
+        outlineVariant = 0xFF31353D.toInt(),
+        surfaceDim = 0xFF0A0B0D.toInt(),
+        surfaceBright = 0xFF2F333B.toInt(),
+        surfaceContainerLowest = 0xFF0A0B0D.toInt(),
+        surfaceContainerLow = 0xFF16181C.toInt(),
+        surfaceContainer = 0xFF1A1C21.toInt(),
+        surfaceContainerHigh = 0xFF202329.toInt(),
+        surfaceContainerHighest = 0xFF262A31.toInt()
     )
 
-    /** AMOLED is true black, with containers stepping up through near-black tones. */
+    /**
+     * AMOLED is true black, with containers stepping up through near-black tones. Cards are almost
+     * invisible until the hairline border defines them, which is the point: it saves power and lets
+     * the lime accent do all of the signalling.
+     */
     val AMOLED = SurfacePalette(
         background = 0xFF000000.toInt(),
-        onBackground = 0xFFF3F4FA.toInt(),
-        surface = 0xFF080A0E.toInt(),
-        onSurface = 0xFFF3F4FA.toInt(),
-        surfaceVariant = 0xFF171A22.toInt(),
-        onSurfaceVariant = 0xFFC4C8D4.toInt(),
-        outline = 0xFF8C91A1.toInt(),
-        outlineVariant = 0xFF303643.toInt(),
+        onBackground = 0xFFF2F3F6.toInt(),
+        surface = 0xFF070809.toInt(),
+        onSurface = 0xFFF2F3F6.toInt(),
+        surfaceVariant = 0xFF141619.toInt(),
+        onSurfaceVariant = 0xFFAEB4BF.toInt(),
+        outline = 0xFF5E646F.toInt(),
+        outlineVariant = 0xFF282C33.toInt(),
         surfaceDim = 0xFF000000.toInt(),
-        surfaceBright = 0xFF262B35.toInt(),
+        surfaceBright = 0xFF22262C.toInt(),
         surfaceContainerLowest = 0xFF000000.toInt(),
-        surfaceContainerLow = 0xFF0A0C11.toInt(),
-        surfaceContainer = 0xFF0F1218.toInt(),
-        surfaceContainerHigh = 0xFF151920.toInt(),
-        surfaceContainerHighest = 0xFF1B1F29.toInt()
+        surfaceContainerLow = 0xFF0A0B0D.toInt(),
+        surfaceContainer = 0xFF0E1012.toInt(),
+        surfaceContainerHigh = 0xFF141618.toInt(),
+        surfaceContainerHighest = 0xFF191C20.toInt()
     )
 
     private val OVERLAY_LIGHT = OverlayColors(
-        cardBackground = 0xFFFFFBFE.toInt(),
-        cardStroke = 0xFF4F46E5.toInt(),
-        titleText = 0xFF4F46E5.toInt(),
-        bodyText = 0xFF1C1B1F.toInt(),
-        mutedText = 0xFF49454F.toInt(),
-        divider = 0xFFE7E0EC.toInt(),
-        chipBackground = 0xF2FFFFFF.toInt(),
-        chipStroke = 0x664F46E5,
-        chipDivider = 0x1F000000,
-        accept = 0xFF15803D.toInt(),
+        cardBackground = 0xFFFFFFFF.toInt(),
+        cardStroke = 0xFF4F6B14.toInt(),
+        titleText = 0xFF3F560F.toInt(),
+        bodyText = 0xFF15171A.toInt(),
+        mutedText = 0xFF5B6169.toInt(),
+        divider = 0xFFE3E6E0.toInt(),
+        chipBackground = 0xF7FFFFFF.toInt(),
+        chipStroke = 0x3D4F6B14,
+        chipDivider = 0x1A000000,
+        accept = 0xFF2E6A1F.toInt(),
         reject = 0xFFB3261E.toInt(),
-        accent = 0xFF4F46E5.toInt()
+        accent = 0xFF4F6B14.toInt()
     )
 
     private val OVERLAY_DARK = OverlayColors(
-        cardBackground = 0xFF20242E.toInt(),
-        cardStroke = 0xFF818CF8.toInt(),
-        titleText = 0xFF818CF8.toInt(),
-        bodyText = 0xFFE8E9F1.toInt(),
-        mutedText = 0xFFC2C6D3.toInt(),
-        divider = 0xFF3A404D.toInt(),
-        chipBackground = 0xF220242E.toInt(),
-        chipStroke = 0x66818CF8,
-        chipDivider = 0x33FFFFFF,
-        accept = 0xFF4ADE80.toInt(),
-        reject = 0xFFFB7185.toInt(),
-        accent = 0xFF818CF8.toInt()
+        cardBackground = 0xFF1A1C21.toInt(),
+        cardStroke = 0xFF45514A.toInt(),
+        titleText = 0xFFCBF56A.toInt(),
+        bodyText = 0xFFECEEF2.toInt(),
+        mutedText = 0xFFA7ADB8.toInt(),
+        divider = 0xFF31353D.toInt(),
+        chipBackground = 0xF2141518.toInt(),
+        chipStroke = 0x59CBF56A,
+        chipDivider = 0x26FFFFFF,
+        accept = 0xFF8FE07A.toInt(),
+        reject = 0xFFFF8A80.toInt(),
+        accent = 0xFFCBF56A.toInt()
     )
 
     private val OVERLAY_AMOLED = OverlayColors(
-        cardBackground = 0xFF0F1218.toInt(),
-        cardStroke = 0xFF818CF8.toInt(),
-        titleText = 0xFF818CF8.toInt(),
-        bodyText = 0xFFF3F4FA.toInt(),
-        mutedText = 0xFFC4C8D4.toInt(),
-        divider = 0xFF303643.toInt(),
-        chipBackground = 0xF20F1218.toInt(),
-        chipStroke = 0x66818CF8,
-        chipDivider = 0x33FFFFFF,
-        accept = 0xFF4ADE80.toInt(),
-        reject = 0xFFFB7185.toInt(),
-        accent = 0xFF818CF8.toInt()
+        cardBackground = 0xFF0E1012.toInt(),
+        cardStroke = 0xFF45514A.toInt(),
+        titleText = 0xFFCBF56A.toInt(),
+        bodyText = 0xFFF2F3F6.toInt(),
+        mutedText = 0xFFAEB4BF.toInt(),
+        divider = 0xFF282C33.toInt(),
+        chipBackground = 0xF20A0B0D.toInt(),
+        chipStroke = 0x59CBF56A,
+        chipDivider = 0x26FFFFFF,
+        accept = 0xFF8FE07A.toInt(),
+        reject = 0xFFFF8A80.toInt(),
+        accent = 0xFFCBF56A.toInt()
     )
 
     /**
