@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Schedule
@@ -97,21 +96,23 @@ fun HistoryScreen(onBack: () -> Unit) {
             } else {
                 item {
                     GroupCard {
-                        items(historyItems) { item ->
+                        // The list is at most a few minutes of recent text, so it is laid out in
+                        // full inside one card rather than as a nested lazy list.
+                        historyItems.forEachIndexed { index, entry ->
                             HistoryRow(
                                 time = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-                                    .format(Date(item.timestamp)),
-                                text = item.text,
+                                    .format(Date(entry.timestamp)),
+                                text = entry.text,
                                 onCopy = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
                                         as ClipboardManager
                                     clipboard.setPrimaryClip(
-                                        ClipData.newPlainText("History item", item.text)
+                                        ClipData.newPlainText("History item", entry.text)
                                     )
                                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                                 }
                             )
-                            if (item != historyItems.last()) RowDivider()
+                            if (index != historyItems.lastIndex) RowDivider()
                         }
                     }
                 }
