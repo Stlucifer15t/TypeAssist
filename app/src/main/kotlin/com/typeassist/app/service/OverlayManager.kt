@@ -476,7 +476,12 @@ class OverlayManager(private val context: Context) {
                 })
             }
 
-            // Centred on screen. The field-anchored position let the keyboard cover the chip.
+            // Horizontally centred but pushed below the middle: the loading indicator (and the Undo
+            // pill) are centred too, so without this offset the chip would cover the spinner while a
+            // stream is running and the Undo pill right after a command finishes. Keeping it near the
+            // middle still keeps the keyboard away from it.
+            val indicatorReach = 32f * LoadingIndicatorStyle.scaleOf(config.loadingIndicatorSizePercent) *
+                context.resources.displayMetrics.density
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -486,6 +491,7 @@ class OverlayManager(private val context: Context) {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.CENTER
+                y = (indicatorReach + dpF(44f)).toInt()
             }
 
             resultChipView = card
