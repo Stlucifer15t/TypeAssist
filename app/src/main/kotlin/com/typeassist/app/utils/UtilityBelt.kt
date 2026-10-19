@@ -3,6 +3,7 @@ package com.typeassist.app.utils
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 import kotlin.random.Random
 
 object UtilityBelt {
@@ -23,6 +24,29 @@ object UtilityBelt {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
         return (1..12).map { chars[Random.nextInt(chars.length)] }.joinToString("")
     }
+
+    /** A v4 UUID, for tracking IDs and test data a developer is typing by hand. */
+    fun generateUuid(): String = UUID.randomUUID().toString()
+
+    /**
+     * "HELLO, WORLD" and "hello world" both become "Hello, World". Collapses runs of whitespace to
+     * single spaces, which matches what the transform is for: normalising typed-out text.
+     */
+    fun titleCase(text: String): String =
+        text.lowercase(Locale.getDefault())
+            .trim()
+            .split(WHITESPACE)
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { it.replaceFirstChar { ch -> ch.uppercase() } }
+
+    fun countWords(text: String): Int =
+        text.trim().split(WHITESPACE).count { it.isNotBlank() }
+
+    /** "2 words · 11 characters" - the line the `.count` shortcut inserts into the field. */
+    fun countSummary(text: String): String =
+        "${countWords(text)} words · ${text.trim().length} characters"
+
+    private val WHITESPACE = Regex("\\s+")
 
     fun evaluateMath(expression: String): String {
         return try {

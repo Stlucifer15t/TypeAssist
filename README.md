@@ -98,10 +98,16 @@ Type a shortcut straight into any text field — Prompt AI detects it after a sh
 | `(.c: 25 * 4 + 10)` | Offline calculator (`+ - * / ^ ( ) sqrt sin cos tan log`) | → `110` |
 | `.now` / `.date` | Insert the current time / date | → `2026-10-07 14:30` |
 | `.pass` | Generate a strong random password | → `t7#Kq2!mVs9x` |
+| `.uuid` | Generate a v4 UUID | → `3f2504e0-4f89-41d3-9a0c-0305e82c3301` |
+| `.clip` | Insert the clipboard at the trigger | |
+| `.count` | Insert the word + character count of the text before the trigger | `hello world .count` → `2 words · 11 characters` |
+| `.upper` / `.lower` / `.title` | Offline case transform of the text before the trigger | `i dropped it .upper` → `I DROPPED IT` |
 | `.reply` | Draft a reply to the conversation on screen, copying your own writing style (needs screen context) | `Sounds good, see you then .reply` |
 | `.sum` | Summarize what is on screen (needs screen context) | `.sum` |
 | `.ta` + `@screen` | Ask a question about what is on screen | `What does this error mean? @screen .ta` |
 | `.undo` | Revert the last change | |
+
+The `.now`, `.pass`, `.uuid`, `.clip`, `.count` and case-transform tools above run entirely offline: they need no provider, no key and no connection.
 
 By default a trigger must sit at the end of the text. In **Settings → Behaviour → Triggers & text** you can **Allow triggers anywhere**, **Ignore the preceding space** (so `hello.ta` works), and change the **Global rewrite pattern** (`%` marks where the instruction goes, default `...%...`).
 

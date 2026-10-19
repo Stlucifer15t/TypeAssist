@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -63,6 +64,14 @@ class MyAccessibilityService : AccessibilityService() {
         /** Marker that makes a normal `.ta` question refer to what is on screen. */
         private const val SCREEN_ASK_MARKER = "@screen"
 
+        /** Offline text tools: they work without any provider configured. */
+        private const val CLIP_TRIGGER = ".clip"
+        private const val COUNT_TRIGGER = ".count"
+        private val TEXT_TOOLS: Map<String, (String) -> String> = mapOf(
+            ".upper" to { s -> s.uppercase() },
+            ".lower" to { s -> s.lowercase() },
+            ".title" to { s -> com.typeassist.app.utils.UtilityBelt.titleCase(s) }
+        )
 
     }
 
@@ -409,7 +418,8 @@ class MyAccessibilityService : AccessibilityService() {
                 val utilityTriggers = mapOf(
                     ".now" to { com.typeassist.app.utils.UtilityBelt.getTime() },
                     ".date" to { com.typeassist.app.utils.UtilityBelt.getDate() },
-                    ".pass" to { com.typeassist.app.utils.UtilityBelt.generatePassword() }
+                    ".pass" to { com.typeassist.app.utils.UtilityBelt.generatePassword() },
+                    ".uuid" to { com.typeassist.app.utils.UtilityBelt.generateUuid() }
                 )
 
                 for ((uTrigger, uAction) in utilityTriggers) {
@@ -422,17 +432,84 @@ class MyAccessibilityService : AccessibilityService() {
                              if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
                              lastNode = inputNode
                              undoCacheTimestamp = System.currentTimeMillis()
-                             
+
                              val prefix = currentText.substring(0, idx)
                              val suffix = currentText.substring(idx + uTrigger.length)
                              val newText = prefix + result + suffix
-                             
+
                              pasteText(inputNode, newText)
                              overlayManager.showUndoButton(config)
                              return
                          }
                     }
                 }
+
+                // -- Offline text tools: instant, provider-free, undoable like every other command --
+                // .clip inserts the clipboard in place of the trigger.
+                val clipIndex = currentText.lastIndexOf(clipTrigger)
+                if (clipIndex != -1 &&
+                    (config.allowTriggerAnywhere || clipIndex + clipTrigger.length == currentText.length)
+                ) {
+                    val clipboard = clipboardText()
+                    if (clipboard.isNullOrEmpty()) {
+                        overlayManager.showToast("The clipboard is empty")
+                    } else {
+                        originalTextCache = currentText
+                        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+                        lastNode = inputNode
+                        undoCacheTimestamp = System.currentTimeMillis()
+                        pasteText(
+                            inputNode,
+                            currentText.substring(0, clipIndex) + clipboard +
+                                currentText.substring(clipIndex + clipTrigger.length)
+                        )
+                        overlayManager.showUndoButton(config)
+                    }
+                    return
+                }
+
+                // .count reports the text before the trigger, then the case tools rewrite it.
+                val countIndex = currentText.lastIndexOf(countTrigger)
+                if (countIndex != -1 &&
+                    (config.allowTriggerAnywhere || countIndex + countTrigger.length == currentText.length) &&
+                    currentText.substring(0, countIndex).trim().isNotEmpty()
+                ) {
+                    originalTextCache = currentText
+                    if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+                    lastNode = inputNode
+                    undoCacheTimestamp = System.currentTimeMillis()
+                    pasteText(
+                        inputNode,
+                        currentText.substring(0, countIndex) +
+                            com.typeassist.app.utils.UtilityBelt.countSummary(currentText.substring(0, countIndex).trim()) +
+                            currentText.substring(countIndex + countTrigger.length)
+                    )
+                    overlayManager.showUndoButton(config)
+                    return
+                }
+
+                var textToolMatched = false
+                for ((toolTrigger, toolAction) in textTools) {
+                    val toolIndex = currentText.lastIndexOf(toolTrigger)
+                    if (toolIndex == -1) continue
+                    val isAtEnd = toolIndex + toolTrigger.length == currentText.length
+                    if (!config.allowTriggerAnywhere && !isAtEnd) continue
+                    // A case tool with nothing to transform would wipe the field, so it stays put.
+                    val target = currentText.substring(0, toolIndex).trim()
+                    if (target.isEmpty()) continue
+                    originalTextCache = currentText
+                    if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+                    lastNode = inputNode
+                    undoCacheTimestamp = System.currentTimeMillis()
+                    pasteText(
+                        inputNode,
+                        toolAction(target) + currentText.substring(toolIndex + toolTrigger.length)
+                    )
+                    overlayManager.showUndoButton(config)
+                    textToolMatched = true
+                    break
+                }
+                if (textToolMatched) return
 
                 val undoCommandPattern = config.undoCommandPattern.trim()
                 val timeSinceCache = System.currentTimeMillis() - undoCacheTimestamp
@@ -942,6 +1019,14 @@ class MyAccessibilityService : AccessibilityService() {
         val last = lastAppliedText ?: return false
         if (text != last) return false
         return System.currentTimeMillis() - lastAppliedAt < ECHO_WINDOW_MS
+    }
+
+    /** The first clipboard item as text, or null when the clipboard is empty or unreadable. */
+    private fun clipboardText(): String? = try {
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        manager.primaryClip?.getItemAt(0)?.coerceToText(applicationContext)?.toString()
+    } catch (e: Exception) {
+        null
     }
 
     private fun performAICall(
