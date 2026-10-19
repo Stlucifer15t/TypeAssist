@@ -106,6 +106,9 @@ fun BehaviourSettingsScreen(
     var screenContextChatLabels by remember(config.screenContextChatLabels) {
         mutableStateOf(config.screenContextChatLabels)
     }
+    var screenImageEnabled by remember(config.screenImageEnabled) {
+        mutableStateOf(config.screenImageEnabled)
+    }
     var blockedPackages by remember(config.screenContextBlockedPackages) {
         mutableStateOf(config.screenContextBlockedPackages.orEmpty().toList())
     }
@@ -412,6 +415,19 @@ fun BehaviourSettingsScreen(
                         onCheckedChange = {
                             screenContextChatLabels = it
                             onSave(config.copy(screenContextChatLabels = it))
+                        }
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = "Send a screenshot with .reply",
+                        description = "Captures the whole screen so the model can read a photo a " +
+                            "contact sent. Needs Android 11+ and a Gemini or OpenAI-compatible " +
+                            "provider. Off by default.",
+                        checked = screenImageEnabled,
+                        enabled = screenContextEnabled,
+                        onCheckedChange = {
+                            screenImageEnabled = it
+                            onSave(config.copy(screenImageEnabled = it))
                         }
                     )
                 }

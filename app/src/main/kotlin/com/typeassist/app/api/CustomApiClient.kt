@@ -34,6 +34,7 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage?,
         callback: (Result<String>) -> Unit
     ) {
         callCustomApi(
@@ -44,6 +45,7 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
             userText = userText,
             generation = GenerationSettings.sanitize(config.generationConfig),
             timeoutSeconds = config.apiTimeoutSeconds,
+            image = image,
             callback = callback
         )
     }
@@ -56,11 +58,12 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         userText: String,
         generation: GenConfig,
         timeoutSeconds: Long,
+        image: PromptImage? = null,
         callback: (Result<String>) -> Unit
     ) {
         lastUsage = null
         val request = try {
-            buildRequest(baseUrl, apiKey, model, prompt, userText, generation, stream = false)
+            buildRequest(baseUrl, apiKey, model, prompt, userText, generation, image = image, stream = false)
         } catch (e: Exception) {
             callback(Result.failure(e))
             return
@@ -139,6 +142,7 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage?,
         onDelta: (String) -> Unit,
         callback: (Result<String>) -> Unit
     ): AiStream? {
@@ -151,6 +155,7 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
                 prompt = prompt,
                 userText = userText,
                 generation = generation,
+                image = image,
                 stream = true
             )
         } catch (e: Exception) {
@@ -222,6 +227,7 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         prompt: String,
         userText: String,
         generation: GenConfig,
+        image: PromptImage? = null,
         stream: Boolean
     ): Request {
         val jsonBody = JSONObject()
@@ -233,10 +239,26 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         systemMessage.put("content", prompt)
         messagesArray.put(systemMessage)
 
-        // User message
+        // User message. With an image the content becomes the OpenAI multimodal array, otherwise a
+        // plain string (which every OpenAI-compatible endpoint understands).
         val userMessage = JSONObject()
         userMessage.put("role", "user")
-        userMessage.put("content", userText)
+        if (image == null) {
+            userMessage.put("content", userText)
+        } else {
+            val contentArray = JSONArray()
+            val textPart = JSONObject()
+            textPart.put("type", "text")
+            textPart.put("text", userText)
+            contentArray.put(textPart)
+            val imageUrl = JSONObject()
+            imageUrl.put("url", "data:${image.mimeType};base64,${image.base64}")
+            val imagePart = JSONObject()
+            imagePart.put("type", "image_url")
+            imagePart.put("image_url", imageUrl)
+            contentArray.put(imagePart)
+            userMessage.put("content", contentArray)
+        }
         messagesArray.put(userMessage)
 
         val wire = GenerationSettings.wireParameters(generation)

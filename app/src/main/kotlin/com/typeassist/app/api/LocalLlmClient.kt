@@ -23,8 +23,10 @@ class LocalLlmClient(private val service: MyAccessibilityService) : AiProvider {
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage?,
         callback: (Result<String>) -> Unit
     ) {
+        // On-device text models have no vision; the screenshot is ignored here.
         val localLlmConfig = config.localLlmConfig
         val modelUriOrPath = localLlmConfig.modelPath
         

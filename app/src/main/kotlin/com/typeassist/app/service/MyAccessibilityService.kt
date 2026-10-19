@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
@@ -23,6 +24,7 @@ import com.typeassist.app.api.CustomApiClient
 import com.typeassist.app.api.GeminiApiClient
 import com.typeassist.app.api.HttpClients
 import com.typeassist.app.api.LocalLlmClient
+import com.typeassist.app.api.PromptImage
 import com.typeassist.app.api.ScreenPrompts
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.ConfigMigrations
@@ -34,6 +36,7 @@ import com.typeassist.app.data.StreamThrottle
 import com.typeassist.app.ui.ThemePalettes
 import com.typeassist.app.utils.ScreenTextExtractor
 import okhttp3.*
+import java.util.TimeZone
 import java.util.regex.Pattern
 import android.util.Log
 
@@ -61,6 +64,14 @@ class MyAccessibilityService : AccessibilityService() {
         /** Marker that makes a normal `.ta` question refer to what is on screen. */
         private const val SCREEN_ASK_MARKER = "@screen"
 
+        /** Offline text tools: they work without any provider configured. */
+        private const val CLIP_TRIGGER = ".clip"
+        private const val COUNT_TRIGGER = ".count"
+        private val TEXT_TOOLS: Map<String, (String) -> String> = mapOf(
+            ".upper" to { s -> s.uppercase() },
+            ".lower" to { s -> s.lowercase() },
+            ".title" to { s -> com.typeassist.app.utils.UtilityBelt.titleCase(s) }
+        )
 
     }
 
@@ -108,7 +119,8 @@ class MyAccessibilityService : AccessibilityService() {
         val prompt: String,
         val userText: String,
         val render: (String) -> String,
-        val originalFieldText: String
+        val originalFieldText: String,
+        val image: PromptImage? = null
     )
 
     // -- In-flight stream --
@@ -406,7 +418,8 @@ class MyAccessibilityService : AccessibilityService() {
                 val utilityTriggers = mapOf(
                     ".now" to { com.typeassist.app.utils.UtilityBelt.getTime() },
                     ".date" to { com.typeassist.app.utils.UtilityBelt.getDate() },
-                    ".pass" to { com.typeassist.app.utils.UtilityBelt.generatePassword() }
+                    ".pass" to { com.typeassist.app.utils.UtilityBelt.generatePassword() },
+                    ".uuid" to { com.typeassist.app.utils.UtilityBelt.generateUuid() }
                 )
 
                 for ((uTrigger, uAction) in utilityTriggers) {
@@ -419,17 +432,84 @@ class MyAccessibilityService : AccessibilityService() {
                              if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
                              lastNode = inputNode
                              undoCacheTimestamp = System.currentTimeMillis()
-                             
+
                              val prefix = currentText.substring(0, idx)
                              val suffix = currentText.substring(idx + uTrigger.length)
                              val newText = prefix + result + suffix
-                             
+
                              pasteText(inputNode, newText)
                              overlayManager.showUndoButton(config)
                              return
                          }
                     }
                 }
+
+                // -- Offline text tools: instant, provider-free, undoable like every other command --
+                // .clip inserts the clipboard in place of the trigger.
+                val clipIndex = currentText.lastIndexOf(CLIP_TRIGGER)
+                if (clipIndex != -1 &&
+                    (config.allowTriggerAnywhere || clipIndex + CLIP_TRIGGER.length == currentText.length)
+                ) {
+                    val clipboard = clipboardText()
+                    if (clipboard.isNullOrEmpty()) {
+                        overlayManager.showToast("The clipboard is empty")
+                    } else {
+                        originalTextCache = currentText
+                        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+                        lastNode = inputNode
+                        undoCacheTimestamp = System.currentTimeMillis()
+                        pasteText(
+                            inputNode,
+                            currentText.substring(0, clipIndex) + clipboard +
+                                currentText.substring(clipIndex + CLIP_TRIGGER.length)
+                        )
+                        overlayManager.showUndoButton(config)
+                    }
+                    return
+                }
+
+                // .count reports the text before the trigger, then the case tools rewrite it.
+                val countIndex = currentText.lastIndexOf(COUNT_TRIGGER)
+                if (countIndex != -1 &&
+                    (config.allowTriggerAnywhere || countIndex + COUNT_TRIGGER.length == currentText.length) &&
+                    currentText.substring(0, countIndex).trim().isNotEmpty()
+                ) {
+                    originalTextCache = currentText
+                    if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+                    lastNode = inputNode
+                    undoCacheTimestamp = System.currentTimeMillis()
+                    pasteText(
+                        inputNode,
+                        currentText.substring(0, countIndex) +
+                            com.typeassist.app.utils.UtilityBelt.countSummary(currentText.substring(0, countIndex).trim()) +
+                            currentText.substring(countIndex + COUNT_TRIGGER.length)
+                    )
+                    overlayManager.showUndoButton(config)
+                    return
+                }
+
+                var textToolMatched = false
+                for ((toolTrigger, toolAction) in TEXT_TOOLS) {
+                    val toolIndex = currentText.lastIndexOf(toolTrigger)
+                    if (toolIndex == -1) continue
+                    val isAtEnd = toolIndex + toolTrigger.length == currentText.length
+                    if (!config.allowTriggerAnywhere && !isAtEnd) continue
+                    // A case tool with nothing to transform would wipe the field, so it stays put.
+                    val target = currentText.substring(0, toolIndex).trim()
+                    if (target.isEmpty()) continue
+                    originalTextCache = currentText
+                    if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+                    lastNode = inputNode
+                    undoCacheTimestamp = System.currentTimeMillis()
+                    pasteText(
+                        inputNode,
+                        toolAction(target) + currentText.substring(toolIndex + toolTrigger.length)
+                    )
+                    overlayManager.showUndoButton(config)
+                    textToolMatched = true
+                    break
+                }
+                if (textToolMatched) return
 
                 val undoCommandPattern = config.undoCommandPattern.trim()
                 val timeSinceCache = System.currentTimeMillis() - undoCacheTimestamp
@@ -554,9 +634,10 @@ class MyAccessibilityService : AccessibilityService() {
         userText: String,
         node: AccessibilityNodeInfo?,
         originalFieldText: String,
+        image: PromptImage? = null,
         render: (String) -> String
     ) {
-        lastCommand = PendingAiCommand(prompt, userText, render, originalFieldText)
+        lastCommand = PendingAiCommand(prompt, userText, render, originalFieldText, image)
         overlayManager.showLoading(config)
         overlayManager.hideUndoButton()
         overlayManager.hideResultChip()
@@ -569,6 +650,7 @@ class MyAccessibilityService : AccessibilityService() {
                     prompt = prompt,
                     userText = userText,
                     config = config,
+                    image = image,
                     onDelta = { delta -> onStreamDelta(generation, node, render, delta) },
                     callback = { result ->
                         onStreamFinished(generation, config, node, render, originalFieldText, result)
@@ -598,7 +680,7 @@ class MyAccessibilityService : AccessibilityService() {
             return
         }
 
-        runNonStreamingCommand(config, prompt, userText, node, render)
+        runNonStreamingCommand(config, prompt, userText, node, image, render)
     }
 
     private fun runNonStreamingCommand(
@@ -606,9 +688,10 @@ class MyAccessibilityService : AccessibilityService() {
         prompt: String,
         userText: String,
         node: AccessibilityNodeInfo?,
+        image: PromptImage?,
         render: (String) -> String
     ) {
-        performAICall(config, prompt, userText) { result ->
+        performAICall(config, prompt, userText, image) { result ->
             uiHandler.post {
                 overlayManager.hideLoading()
                 result.onSuccess { aiText ->
@@ -633,6 +716,14 @@ class MyAccessibilityService : AccessibilityService() {
         "local" -> localLlmClient
         else -> geminiApiClient
     }
+
+    /**
+     * Whether the active provider can read an image. Gemini and OpenAI-compatible endpoints do;
+     * Workers AI text models and the on-device llama.cpp models do not, so no screenshot is made
+     * for them (which would only waste time and privacy).
+     */
+    private fun providerSupportsImages(config: AppConfig): Boolean =
+        config.provider == "gemini" || config.provider == "custom"
 
     /**
      * Counts what one finished command used, for the token-usage tab. The provider's own numbers are
@@ -685,21 +776,22 @@ class MyAccessibilityService : AccessibilityService() {
         // For .reply the instruction is part of the system prompt (it has priority over the tone
         // rules), so it is not repeated in the user turn.
         var instructionCarriedByPrompt = false
+        val now = ScreenPrompts.currentTimeLine(TimeZone.getDefault(), System.currentTimeMillis())
         when {
             replyIndex >= 0 -> {
                 instruction = currentText.substring(0, replyIndex).trim()
-                prompt = ScreenPrompts.reply(config, instruction)
+                prompt = ScreenPrompts.reply(config, instruction, now = now)
                 instructionCarriedByPrompt = true
             }
             summaryIndex >= 0 -> {
                 instruction = currentText.substring(0, summaryIndex).trim()
-                prompt = ScreenPrompts.summary(config)
+                prompt = ScreenPrompts.summary(config, now = now)
             }
             asksAboutScreen -> {
                 instruction = currentText.substring(0, askIndex)
                     .replace(SCREEN_ASK_MARKER, "", ignoreCase = true)
                     .trim()
-                prompt = ScreenPrompts.answer(config)
+                prompt = ScreenPrompts.answer(config, now = now)
             }
             else -> return false
         }
@@ -730,8 +822,9 @@ class MyAccessibilityService : AccessibilityService() {
 
         // .reply is rewritten with the user's own messages quoted back at the model: the rules say
         // "copy the Me: lines", and a short sample of them makes that instruction concrete.
+        val voiceSample = ScreenPrompts.voiceSample(screenContext)
         if (replyIndex >= 0) {
-            prompt = ScreenPrompts.reply(config, instruction, ScreenPrompts.voiceSample(screenContext))
+            prompt = ScreenPrompts.reply(config, instruction, voiceSample, now)
         }
 
         val userText = buildString {
@@ -743,13 +836,45 @@ class MyAccessibilityService : AccessibilityService() {
             }
         }
 
-        originalTextCache = currentText
-        if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
-        lastNode = inputNode
-        undoCacheTimestamp = System.currentTimeMillis()
+        // A screenshot is only meaningful for commands that describe the conversation on screen, and
+        // only for providers that can actually read an image: Cloudflare and the local model cannot.
+        val wantsImage = config.screenImageEnabled &&
+            (replyIndex >= 0 || summaryIndex >= 0) &&
+            providerSupportsImages(config)
 
-        // The answer replaces what the user typed, like every other command.
-        executeAiCommand(config, prompt, userText, inputNode, currentText) { aiText -> aiText }
+        fun run(image: PromptImage?) {
+            // With an image the prompt is rebuilt so the model is told to read the screenshot too.
+            val effectivePrompt = if (image == null) {
+                prompt
+            } else {
+                when {
+                    replyIndex >= 0 -> ScreenPrompts.reply(config, instruction, voiceSample, now, imageAttached = true)
+                    summaryIndex >= 0 -> ScreenPrompts.summary(config, now, imageAttached = true)
+                    else -> prompt
+                }
+            }
+            originalTextCache = currentText
+            if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
+            lastNode = inputNode
+            undoCacheTimestamp = System.currentTimeMillis()
+            // The answer replaces what the user typed, like every other command.
+            executeAiCommand(config, effectivePrompt, userText, inputNode, currentText, image) { aiText -> aiText }
+        }
+
+        if (wantsImage) {
+            if (!ScreenImageCapture.isSupported()) {
+                overlayManager.showToast("Screen images need Android 11 or newer")
+                run(null)
+                return true
+            }
+            ScreenImageCapture.capture(this) { image ->
+                if (image == null) overlayManager.showToast("Could not capture the screen image")
+                run(image)
+            }
+            return true
+        }
+
+        run(null)
         return true
     }
 
@@ -810,7 +935,7 @@ class MyAccessibilityService : AccessibilityService() {
                 } else {
                     // Nothing arrived, so the provider probably does not stream: ask normally.
                     Log.d(TAG, "Streaming unavailable (${error.message}); falling back to a single request")
-                    runNonStreamingCommand(config, lastCommand?.prompt.orEmpty(), lastCommand?.userText.orEmpty(), node, render)
+                    runNonStreamingCommand(config, lastCommand?.prompt.orEmpty(), lastCommand?.userText.orEmpty(), node, lastCommand?.image, render)
                 }
             }
         }
@@ -886,7 +1011,7 @@ class MyAccessibilityService : AccessibilityService() {
         originalTextCache = command.originalFieldText
         lastNode = node
         undoCacheTimestamp = System.currentTimeMillis()
-        executeAiCommand(config, command.prompt, command.userText, node, command.originalFieldText, command.render)
+        executeAiCommand(config, command.prompt, command.userText, node, command.originalFieldText, command.image, command.render)
     }
 
     /** True when the text is exactly what we last wrote ourselves, so it must not be re-processed. */
@@ -896,9 +1021,23 @@ class MyAccessibilityService : AccessibilityService() {
         return System.currentTimeMillis() - lastAppliedAt < ECHO_WINDOW_MS
     }
 
-    private fun performAICall(config: AppConfig, prompt: String, userText: String, callback: (Result<String>) -> Unit) {
+    /** The first clipboard item as text, or null when the clipboard is empty or unreadable. */
+    private fun clipboardText(): String? = try {
+        val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        manager.primaryClip?.getItemAt(0)?.coerceToText(applicationContext)?.toString()
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun performAICall(
+        config: AppConfig,
+        prompt: String,
+        userText: String,
+        image: PromptImage?,
+        callback: (Result<String>) -> Unit
+    ) {
         Log.d(TAG, "Performing AI Call: Provider=${config.provider}, Timeout=${config.apiTimeoutSeconds}s")
-        providerFor(config).generateResponse(prompt, userText, config, callback)
+        providerFor(config).generateResponse(prompt, userText, config, image, callback)
     }
 
     private fun cleanAiText(text: String): String {

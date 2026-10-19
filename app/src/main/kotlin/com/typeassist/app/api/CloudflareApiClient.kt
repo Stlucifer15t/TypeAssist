@@ -33,8 +33,10 @@ class CloudflareApiClient(private val client: OkHttpClient) : AiProvider {
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage?,
         callback: (Result<String>) -> Unit
     ) {
+        // Workers AI text models do not take the screenshot; the text path is unchanged.
         callCloudflare(
             accountId = config.cloudflareConfig.accountId,
             apiToken = config.cloudflareConfig.apiToken,

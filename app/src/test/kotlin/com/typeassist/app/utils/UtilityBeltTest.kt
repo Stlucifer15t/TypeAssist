@@ -42,4 +42,32 @@ class UtilityBeltTest {
         assertEquals("Error", UtilityBelt.evaluateMath("invalid + expression"))
         assertEquals("Infinity", UtilityBelt.evaluateMath("5 / 0"))
     }
+
+    @Test
+    fun testTitleCaseNormalisesTheWordsItTouches() {
+        assertEquals("Hello, World", UtilityBelt.titleCase("HELLO, WORLD"))
+        assertEquals("Just Typing Some Things", UtilityBelt.titleCase("JUST TYPING   some things"))
+        assertEquals("Don't Worry", UtilityBelt.titleCase("don't worry"))
+        // A trigger with nothing before it is a no-op, never a crash.
+        assertEquals("", UtilityBelt.titleCase(""))
+    }
+
+    @Test
+    fun testCountsAreSaidInWordsThenCharacters() {
+        assertEquals(2, UtilityBelt.countWords("  hello   world "))
+        assertEquals(2, UtilityBelt.countSummary("hello world").split(" ")[0].toInt())
+        // "hello world" is 11 characters once the edge spaces are gone.
+        assertTrue(UtilityBelt.countSummary("hello world").contains("11 characters"))
+    }
+
+    @Test
+    fun testGenerateUuidIsAWellFormedV4() {
+        val first = UtilityBelt.generateUuid()
+        // 8-4-4-4-12 hex groups, third group starting with 4 (v4), fourth with 8-b (RFC variant).
+        assertTrue(
+            Regex("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\$")
+                .matches(first)
+        )
+        assertTrue(first != UtilityBelt.generateUuid())
+    }
 }

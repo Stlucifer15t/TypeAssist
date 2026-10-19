@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.TimeZone
 
 /**
  * The instructions behind `.reply`, `.sum` and `.ta`. These strings are the entire difference
@@ -170,5 +171,45 @@ class ScreenPromptsTest {
         ).forEach { prompt ->
             assertTrue(prompt.isNotBlank())
         }
+    }
+
+    @Test
+    fun theCurrentTimeLineIsReadableInAnyTimezone() {
+        assertEquals("1970-01-01 00:00 (UTC+00:00)", ScreenPrompts.currentTimeLine(TimeZone.getTimeZone("UTC"), 0L))
+        // A positive offset shifts the wall clock forward and is shown as +HH:MM.
+        assertEquals(
+            "1970-01-01 02:00 (UTC+02:00)",
+            ScreenPrompts.currentTimeLine(TimeZone.getTimeZone("GMT+02:00"), 0L)
+        )
+        // A negative offset is shown with a minus sign.
+        assertEquals(
+            "1969-12-31 19:00 (UTC-05:00)",
+            ScreenPrompts.currentTimeLine(TimeZone.getTimeZone("GMT-05:00"), 0L)
+        )
+    }
+
+    @Test
+    fun theClockIsOnlyAddedWhenItIsGiven() {
+        // Without a timestamp the prompt stays deterministic (the tests compare whole prompts).
+        val withoutClock = ScreenPrompts.reply(config())
+        assertFalse(withoutClock.contains("current date and time"))
+
+        val withClock = ScreenPrompts.reply(config(), now = "2026-10-19 14:30 (UTC+02:00)")
+        assertTrue(withClock.contains("current date and time"))
+        assertTrue(withClock.contains("2026-10-19 14:30 (UTC+02:00)"))
+
+        // The summary and the @screen answer carry it too.
+        assertTrue(ScreenPrompts.summary(config(), now = "2026-10-19 14:30 (UTC+02:00)").contains("2026-10-19"))
+        assertTrue(ScreenPrompts.answer(config(), now = "2026-10-19 14:30 (UTC+02:00)").contains("2026-10-19"))
+    }
+
+    @Test
+    fun anAttachedImageIsExplainedToTheModel() {
+        val textOnly = ScreenPrompts.reply(config())
+        assertFalse(textOnly.contains("screenshot of the screen is attached"))
+
+        val withImage = ScreenPrompts.reply(config(), imageAttached = true)
+        assertTrue(withImage.contains("screenshot of the screen is attached"))
+        assertTrue(ScreenPrompts.summary(config(), imageAttached = true).contains("screenshot"))
     }
 }
