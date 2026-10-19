@@ -46,7 +46,7 @@ class UtilityBeltTest {
     @Test
     fun testTitleCaseNormalisesTheWordsItTouches() {
         assertEquals("Hello, World", UtilityBelt.titleCase("HELLO, WORLD"))
-        assertEquals("Just typing some things", UtilityBelt.titleCase("JUST TYPING   some things"))
+        assertEquals("Just Typing Some Things", UtilityBelt.titleCase("JUST TYPING   some things"))
         assertEquals("Don't Worry", UtilityBelt.titleCase("don't worry"))
         // A trigger with nothing before it is a no-op, never a crash.
         assertEquals("", UtilityBelt.titleCase(""))
