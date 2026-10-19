@@ -446,9 +446,9 @@ class MyAccessibilityService : AccessibilityService() {
 
                 // -- Offline text tools: instant, provider-free, undoable like every other command --
                 // .clip inserts the clipboard in place of the trigger.
-                val clipIndex = currentText.lastIndexOf(clipTrigger)
+                val clipIndex = currentText.lastIndexOf(CLIP_TRIGGER)
                 if (clipIndex != -1 &&
-                    (config.allowTriggerAnywhere || clipIndex + clipTrigger.length == currentText.length)
+                    (config.allowTriggerAnywhere || clipIndex + CLIP_TRIGGER.length == currentText.length)
                 ) {
                     val clipboard = clipboardText()
                     if (clipboard.isNullOrEmpty()) {
@@ -461,7 +461,7 @@ class MyAccessibilityService : AccessibilityService() {
                         pasteText(
                             inputNode,
                             currentText.substring(0, clipIndex) + clipboard +
-                                currentText.substring(clipIndex + clipTrigger.length)
+                                currentText.substring(clipIndex + CLIP_TRIGGER.length)
                         )
                         overlayManager.showUndoButton(config)
                     }
@@ -469,9 +469,9 @@ class MyAccessibilityService : AccessibilityService() {
                 }
 
                 // .count reports the text before the trigger, then the case tools rewrite it.
-                val countIndex = currentText.lastIndexOf(countTrigger)
+                val countIndex = currentText.lastIndexOf(COUNT_TRIGGER)
                 if (countIndex != -1 &&
-                    (config.allowTriggerAnywhere || countIndex + countTrigger.length == currentText.length) &&
+                    (config.allowTriggerAnywhere || countIndex + COUNT_TRIGGER.length == currentText.length) &&
                     currentText.substring(0, countIndex).trim().isNotEmpty()
                 ) {
                     originalTextCache = currentText
@@ -482,14 +482,14 @@ class MyAccessibilityService : AccessibilityService() {
                         inputNode,
                         currentText.substring(0, countIndex) +
                             com.typeassist.app.utils.UtilityBelt.countSummary(currentText.substring(0, countIndex).trim()) +
-                            currentText.substring(countIndex + countTrigger.length)
+                            currentText.substring(countIndex + COUNT_TRIGGER.length)
                     )
                     overlayManager.showUndoButton(config)
                     return
                 }
 
                 var textToolMatched = false
-                for ((toolTrigger, toolAction) in textTools) {
+                for ((toolTrigger, toolAction) in TEXT_TOOLS) {
                     val toolIndex = currentText.lastIndexOf(toolTrigger)
                     if (toolIndex == -1) continue
                     val isAtEnd = toolIndex + toolTrigger.length == currentText.length
