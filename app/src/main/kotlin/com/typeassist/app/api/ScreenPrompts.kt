@@ -3,6 +3,11 @@ package com.typeassist.app.api
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.ReplyStyle
 import com.typeassist.app.utils.ScreenTextExtractor
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import kotlin.math.abs
 
 /**
  * The instructions behind the three commands that read the screen: `.reply`, `.sum` and a `.ta`
@@ -22,7 +27,13 @@ object ScreenPrompts {
      * showing the model two real sentences it must imitate is what makes the answer sound like the
      * person who is about to send it.
      */
-    fun reply(config: AppConfig?, instruction: String = "", voiceSample: String? = null): String {
+    fun reply(
+        config: AppConfig?,
+        instruction: String = "",
+        voiceSample: String? = null,
+        now: String? = null,
+        imageAttached: Boolean = false
+    ): String {
         val tone = ReplyStyle.sanitizeTone(config?.replyTone)
         val length = ReplyStyle.sanitizeLength(config?.replyLength)
         val voice = voiceSample?.trim().orEmpty()
@@ -66,6 +77,12 @@ object ScreenPrompts {
         }
         builder.append("\n\n").append(toneInstruction(tone))
         builder.append("\n").append(lengthInstruction(length))
+        if (imageAttached) {
+            builder.append("\n").append(IMAGE_INSTRUCTION)
+        }
+        if (!now.isNullOrBlank()) {
+            builder.append("\n").append(timeInstruction(now))
+        }
         if (voice.isBlank()) {
             builder.append(
                 "\nNo sample of the user's own writing was available: keep the wording plain and " +
@@ -97,17 +114,52 @@ object ScreenPrompts {
         return lines.joinToString("\n").take(VOICE_SAMPLE_CHARS)
     }
 
-    fun summary(config: AppConfig?): String =
-        "Summarize the content on the screen for someone who has not seen it. Keep only what " +
-            "matters: decisions, names, numbers, dates and anything being asked for. Use one short " +
-            "line per point, in the same language as the content. " +
-            summaryStyleInstruction(ReplyStyle.sanitizeLength(config?.replyLength)) +
-            " Return only the summary."
+    fun summary(config: AppConfig?, now: String? = null, imageAttached: Boolean = false): String =
+        buildString {
+            append(
+                "Summarize the content on the screen for someone who has not seen it. Keep only " +
+                    "what matters: decisions, names, numbers, dates and anything being asked for. " +
+                    "Use one short line per point, in the same language as the content. "
+            )
+            append(summaryStyleInstruction(ReplyStyle.sanitizeLength(config?.replyLength)))
+            if (imageAttached) append(" ").append(IMAGE_INSTRUCTION)
+            if (!now.isNullOrBlank()) append(" ").append(timeInstruction(now))
+            append(" Return only the summary.")
+        }
 
-    fun answer(config: AppConfig?): String =
-        "Answer the question using only the screen content provided. Be concise and return only " +
-            "the answer. If the screen does not contain the answer, say so in one short line " +
-            "instead of guessing. Write in the same language as the question."
+    fun answer(config: AppConfig?, now: String? = null, imageAttached: Boolean = false): String =
+        buildString {
+            append(
+                "Answer the question using only the screen content provided. Be concise and return " +
+                    "only the answer. If the screen does not contain the answer, say so in one short " +
+                    "line instead of guessing. Write in the same language as the question."
+            )
+            if (imageAttached) append(" ").append(IMAGE_INSTRUCTION)
+            if (!now.isNullOrBlank()) append(" ").append(timeInstruction(now))
+        }
+
+    /**
+     * The device's local date and time, as a single line to drop into a prompt so the model can
+     * resolve "today", "tomorrow" and "at 5". A pure function of the clock, so it can be asserted
+     * with a fixed moment and timezone instead of the real one.
+     */
+    fun currentTimeLine(zone: TimeZone, nowMillis: Long): String {
+        val format = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US)
+        format.timeZone = zone
+        val offset = zone.getOffset(nowMillis)
+        val sign = if (offset < 0) "-" else "+"
+        val magnitude = abs(offset)
+        val hours = magnitude / 3_600_000
+        val minutes = (magnitude % 3_600_000) / 60_000
+        return String.format(
+            Locale.US,
+            "%s (UTC%s%02d:%02d)",
+            format.format(Date(nowMillis)),
+            sign,
+            hours,
+            minutes
+        )
+    }
 
     /**
      * The label the screen reader puts before the user's own messages. Taken from the extractor, so
@@ -119,6 +171,27 @@ object ScreenPrompts {
     private const val MIN_VOICE_LINE_CHARS = 12
     private const val VOICE_SAMPLE_LINES = 2
     private const val VOICE_SAMPLE_CHARS = 400
+
+    /**
+     * Added when a screenshot of the screen is attached: the text-only reader cannot see a photo a
+     * contact sent, so the model is told to read the conversation from the image as well.
+     */
+    private const val IMAGE_INSTRUCTION =
+        "A screenshot of the screen is attached. Read the conversation from it, including any photo " +
+            "or image the other person sent, and use what you see alongside the text."
+
+    private fun timeInstruction(now: String): String {
+        val line = now.trim()
+        if (line.isEmpty()) return ""
+        // The caller may hand over just the timestamp, so keep it readable either way.
+        val stamp = if (line.startsWith("Current date and time:", ignoreCase = true)) {
+            line.substringAfter(":").trim()
+        } else {
+            line
+        }
+        return "The current date and time is $stamp. Use it to resolve relative references such as " +
+            "\"today\", \"tomorrow\" or \"at 5\", and never invent a time that contradicts it."
+    }
 
     private fun toneInstruction(tone: String): String = when (tone) {
         ReplyStyle.TONE_WARM -> "Tone: warm and friendly, without being over-familiar."

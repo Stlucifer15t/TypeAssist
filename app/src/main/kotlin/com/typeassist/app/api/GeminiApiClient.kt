@@ -34,6 +34,7 @@ class GeminiApiClient(private val client: OkHttpClient) : AiProvider {
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage?,
         callback: (Result<String>) -> Unit
     ) {
         callGemini(
@@ -43,6 +44,7 @@ class GeminiApiClient(private val client: OkHttpClient) : AiProvider {
             userText = userText,
             generation = GenerationSettings.sanitize(config.generationConfig),
             timeoutSeconds = config.apiTimeoutSeconds,
+            image = image,
             callback = callback
         )
     }
@@ -54,10 +56,11 @@ class GeminiApiClient(private val client: OkHttpClient) : AiProvider {
         userText: String,
         generation: GenConfig,
         timeoutSeconds: Long,
+        image: PromptImage? = null,
         callback: (Result<String>) -> Unit
     ) {
         lastUsage = null
-        val requestBody = buildBody(prompt, userText, generation)
+        val requestBody = buildBody(prompt, userText, generation, image)
         val url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
         val request = Request.Builder().url(url).post(requestBody).build()
         // Shared client: the connection to generativelanguage.googleapis.com is usually already open.
@@ -119,6 +122,7 @@ class GeminiApiClient(private val client: OkHttpClient) : AiProvider {
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage?,
         onDelta: (String) -> Unit,
         callback: (Result<String>) -> Unit
     ): AiStream? {
@@ -131,7 +135,7 @@ class GeminiApiClient(private val client: OkHttpClient) : AiProvider {
             Request.Builder()
                 .url("https://generativelanguage.googleapis.com/v1beta/models/$model:streamGenerateContent?alt=sse&key=$apiKey")
                 .addHeader("Accept", "text/event-stream")
-                .post(buildBody(prompt, userText, generation))
+                .post(buildBody(prompt, userText, generation, image))
                 .build()
         } catch (e: Exception) {
             return null
@@ -205,11 +209,25 @@ class GeminiApiClient(private val client: OkHttpClient) : AiProvider {
     }
 
     /** The request body, shared by the streaming and non-streaming calls. */
-    internal fun buildBody(prompt: String, userText: String, generation: GenConfig): RequestBody {
+    internal fun buildBody(
+        prompt: String,
+        userText: String,
+        generation: GenConfig,
+        image: PromptImage? = null
+    ): RequestBody {
         val jsonBody = JSONObject()
         val contentsArray = JSONArray()
         val contentObject = JSONObject()
         val partsArray = JSONArray()
+        // The screenshot goes first so the model sees what the question is about before the text.
+        if (image != null) {
+            val inline = JSONObject()
+            inline.put("mime_type", image.mimeType)
+            inline.put("data", image.base64)
+            val imagePart = JSONObject()
+            imagePart.put("inlineData", inline)
+            partsArray.put(imagePart)
+        }
         val partObject = JSONObject()
         partObject.put("text", "$prompt\n\nInput: $userText")
         partsArray.put(partObject)

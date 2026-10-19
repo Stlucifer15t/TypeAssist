@@ -17,10 +17,15 @@ interface AiProvider {
      */
     fun reportedUsage(): TokenUsage? = null
 
+    /**
+     * Runs one request. [image] is an optional screenshot that vision-capable providers send
+     * alongside the text; providers without vision ignore it.
+     */
     fun generateResponse(
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage? = null,
         callback: (Result<String>) -> Unit
     )
 
@@ -32,12 +37,13 @@ interface AiProvider {
      * Returns `null` when this provider cannot stream — or when the request could not even be
      * started — so the caller can fall back to [generateResponse]. Providers that do not support
      * streaming simply keep the default implementation. Deltas and the final result are delivered
-     * on a background thread.
+     * on a background thread. [image] behaves as in [generateResponse].
      */
     fun streamResponse(
         prompt: String,
         userText: String,
         config: AppConfig,
+        image: PromptImage? = null,
         onDelta: (String) -> Unit,
         callback: (Result<String>) -> Unit
     ): AiStream? = null

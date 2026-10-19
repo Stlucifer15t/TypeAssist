@@ -7,7 +7,7 @@ package com.typeassist.app.data
  * `null` instead of its Kotlin default (the same problem [LoadingIndicatorStyle.sanitize] solves
  * for the indicator colour and size).
  */
-const val CURRENT_CONFIG_VERSION: Int = 3
+const val CURRENT_CONFIG_VERSION: Int = 4
 
 /**
  * Apps where screen reading is never used, preloaded into Settings → Screen context.

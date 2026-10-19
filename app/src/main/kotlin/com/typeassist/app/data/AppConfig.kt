@@ -47,7 +47,14 @@ data class AppConfig(
     /** Whose voice `.reply` copies: see [ReplyStyle.TONES]. */
     var replyTone: String = ReplyStyle.TONE_MATCH,
     /** How long a drafted reply is: see [ReplyStyle.LENGTHS]. */
-    var replyLength: String = ReplyStyle.LENGTH_SHORT
+    var replyLength: String = ReplyStyle.LENGTH_SHORT,
+    // --- Added in config version 4 (see ConfigMigrations) ---
+    /**
+     * Attach a screenshot of the screen to `.reply` and `.sum`, so the model can read an image a
+     * contact sent (and layout the text reader cannot see). Off by default: a screenshot is the
+     * whole screen, so the user opts in explicitly.
+     */
+    var screenImageEnabled: Boolean = false
 ) : Serializable
 
 data class CloudflareConfig(
@@ -236,6 +243,7 @@ fun createDefaultConfig(): AppConfig {
         streamResponses = true,
         screenContextEnabled = false,
         screenContextChatLabels = true,
-        screenContextBlockedPackages = defaultBlockedScreenPackages()
+        screenContextBlockedPackages = defaultBlockedScreenPackages(),
+        screenImageEnabled = false
     )
 }
