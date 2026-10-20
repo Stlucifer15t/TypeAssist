@@ -379,7 +379,7 @@ fun LoadingStylePreview(
                                     .width(5.dp)
                                     .height(18.dp)
                                     .scale(scaleX = 1f, scaleY = height)
-                                    .graphicsLayer { pivotY = 18f }
+                                    .graphicsLayer { transformOrigin = TransformOrigin(0.5f, 1f) }
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(body)
                             )
