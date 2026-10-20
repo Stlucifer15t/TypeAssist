@@ -33,7 +33,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.TransformOrigin
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -380,7 +379,6 @@ fun LoadingStylePreview(
                                     .width(5.dp)
                                     .height(18.dp)
                                     .scale(scaleX = 1f, scaleY = height)
-                                    .graphicsLayer { transformOrigin = TransformOrigin(0.5f, 1f) }
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(body)
                             )
