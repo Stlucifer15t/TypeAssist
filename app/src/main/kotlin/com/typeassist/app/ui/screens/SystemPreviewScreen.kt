@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.typeassist.app.data.AppConfig
@@ -59,7 +58,8 @@ fun SystemPreviewScreen(
     onBack: () -> Unit,
     onOpenAppearance: () -> Unit
 ) {
-    val indicatorColor = Color(LoadingIndicatorStyle.sanitizeColor(config.loadingIndicatorColor))
+    val indicatorNeon = config.loadingIndicatorNeon
+    val indicatorNeonColor = LoadingIndicatorStyle.sanitizeNeonColor(config.loadingIndicatorNeonColor)
     val indicatorScale = LoadingIndicatorStyle.sanitizeSizePercent(config.loadingIndicatorSizePercent) / 100f
 
     AppScaffold(
@@ -136,8 +136,14 @@ fun SystemPreviewScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             LoadingStylePreview(
-                                styleId = config.loadingIndicatorStyle,
-                                color = indicatorColor,
+                                styleId = LoadingIndicatorStyle.normalizeStyle(
+                                    LoadingIndicatorStyle.styleIdOf(config.loadingIndicatorStyle)
+                                ),
+                                pickedColor = LoadingIndicatorStyle.sanitizeColor(
+                                    config.loadingIndicatorColor
+                                ),
+                                neonColor = indicatorNeonColor,
+                                neon = indicatorNeon,
                                 scale = indicatorScale
                             )
                         }

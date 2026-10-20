@@ -30,6 +30,10 @@ data class AppConfig(
     var loadingIndicatorStyle: String = "classic",
     var loadingIndicatorColor: Int = LoadingIndicatorStyle.DEFAULT_COLOR,
     var loadingIndicatorSizePercent: Int = LoadingIndicatorStyle.DEFAULT_SIZE_PERCENT,
+    /** Whether the indicator is drawn in the neon look, whatever style is selected. */
+    var loadingIndicatorNeon: Boolean = false,
+    /** The neon colour the spectrum is built from. */
+    var loadingIndicatorNeonColor: Int = LoadingIndicatorStyle.DEFAULT_NEON_COLOR,
     var enablePreviewDialog: Boolean = false,
     var allowTriggerAnywhere: Boolean = false,
     var ignorePrecedingWhitespace: Boolean = false,
@@ -234,6 +238,8 @@ fun createDefaultConfig(): AppConfig {
         loadingIndicatorStyle = "classic",
         loadingIndicatorColor = LoadingIndicatorStyle.DEFAULT_COLOR,
         loadingIndicatorSizePercent = LoadingIndicatorStyle.DEFAULT_SIZE_PERCENT,
+        loadingIndicatorNeon = false,
+        loadingIndicatorNeonColor = LoadingIndicatorStyle.DEFAULT_NEON_COLOR,
         enablePreviewDialog = false,
         allowTriggerAnywhere = false,
         ignorePrecedingWhitespace = false,

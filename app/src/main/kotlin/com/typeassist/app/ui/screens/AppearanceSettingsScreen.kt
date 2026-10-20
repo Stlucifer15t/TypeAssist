@@ -78,10 +78,20 @@ fun AppearanceSettingsScreen(
     var enableUndoOverlay by remember(config.enableUndoOverlay) { mutableStateOf(config.enableUndoOverlay) }
     var enableLoadingOverlay by remember(config.enableLoadingOverlay) { mutableStateOf(config.enableLoadingOverlay) }
     var loadingStyle by remember(config.loadingIndicatorStyle) {
-        mutableStateOf(LoadingIndicatorStyle.styleIdOf(config.loadingIndicatorStyle))
+        mutableStateOf(
+            LoadingIndicatorStyle.normalizeStyle(
+                LoadingIndicatorStyle.styleIdOf(config.loadingIndicatorStyle)
+            )
+        )
     }
     var indicatorColor by remember(config.loadingIndicatorColor) {
         mutableIntStateOf(LoadingIndicatorStyle.sanitizeColor(config.loadingIndicatorColor))
+    }
+    var indicatorNeon by remember(config.loadingIndicatorNeon) {
+        mutableStateOf(config.loadingIndicatorNeon)
+    }
+    var indicatorNeonColor by remember(config.loadingIndicatorNeonColor) {
+        mutableIntStateOf(LoadingIndicatorStyle.sanitizeNeonColor(config.loadingIndicatorNeonColor))
     }
     var indicatorSize by remember(config.loadingIndicatorSizePercent) {
         mutableIntStateOf(LoadingIndicatorStyle.sanitizeSizePercent(config.loadingIndicatorSizePercent))
@@ -158,6 +168,8 @@ fun AppearanceSettingsScreen(
                     IndicatorPreview(
                         styleId = loadingStyle,
                         color = indicatorColor,
+                        neon = indicatorNeon,
+                        neonColor = indicatorNeonColor,
                         sizePercent = indicatorSize
                     )
                 }
@@ -181,21 +193,57 @@ fun AppearanceSettingsScreen(
                     }
                 }
 
-                if (loadingStyle == "neon") {
+                if (loadingStyle == LoadingIndicatorStyle.STYLE_SPECTRUM) {
+                    item { SectionHeader(title = "Neon colour") }
                     item {
-                        NeonPaletteCard()
-                    }
-                } else {
-                    item { SectionHeader(title = "Indicator colour") }
-                    item {
-                        IndicatorColorCard(
-                            color = indicatorColor,
+                        NeonColourCard(
+                            color = indicatorNeonColor,
                             onColorChange = { picked ->
                                 val safe = LoadingIndicatorStyle.ensureOpaque(picked)
-                                indicatorColor = safe
-                                onSave(config.copy(loadingIndicatorColor = safe))
+                                indicatorNeonColor = safe
+                                onSave(config.copy(loadingIndicatorNeonColor = safe))
                             }
                         )
+                    }
+                } else {
+                    item {
+                        GroupCard {
+                            SwitchRow(
+                                title = "Neon glow",
+                                description = "Lights the indicator up in the colour you pick below.",
+                                checked = indicatorNeon,
+                                onCheckedChange = {
+                                    indicatorNeon = it
+                                    onSave(config.copy(loadingIndicatorNeon = it))
+                                }
+                            )
+                        }
+                    }
+
+                    if (indicatorNeon) {
+                        item { SectionHeader(title = "Neon colour") }
+                        item {
+                            NeonColourCard(
+                                color = indicatorNeonColor,
+                                onColorChange = { picked ->
+                                    val safe = LoadingIndicatorStyle.ensureOpaque(picked)
+                                    indicatorNeonColor = safe
+                                    onSave(config.copy(loadingIndicatorNeonColor = safe))
+                                }
+                            )
+                        }
+                    } else {
+                        item { SectionHeader(title = "Indicator colour") }
+                        item {
+                            IndicatorColorCard(
+                                color = indicatorColor,
+                                onColorChange = { picked ->
+                                    val safe = LoadingIndicatorStyle.ensureOpaque(picked)
+                                    indicatorColor = safe
+                                    onSave(config.copy(loadingIndicatorColor = safe))
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -245,9 +293,10 @@ fun AppearanceSettingsScreen(
 private fun IndicatorPreview(
     styleId: String,
     color: Int,
+    neon: Boolean,
+    neonColor: Int,
     sizePercent: Int
 ) {
-    val effective = LoadingIndicatorStyle.effectiveColor(styleId, color)
     val scale = LoadingIndicatorStyle.scaleOf(sizePercent)
     val animatedScale by animateFloatAsState(targetValue = scale, label = "indicatorScale")
     AppCard(tone = CardTone.Muted, contentPadding = PaddingValues(Spacing.lg)) {
@@ -267,7 +316,9 @@ private fun IndicatorPreview(
         ) {
             LoadingStylePreview(
                 styleId = styleId,
-                color = Color(effective),
+                pickedColor = color,
+                neonColor = neonColor,
+                neon = neon,
                 scale = animatedScale
             )
         }
@@ -288,40 +339,107 @@ private fun IndicatorPreview(
     }
 }
 
-/** The locked neon spectrum: shown, not offered, because the ring cycles through it by design. */
+/**
+ * The neon colour picker: the vivid swatches the spectrum is built from, plus a hex field for any
+ * colour at all. The spectrum card underneath shows what the chosen hue actually produces.
+ */
 @Composable
-private fun NeonPaletteCard() {
-    val labels = listOf("Cyan", "Blue", "Violet", "Magenta", "Pink")
+private fun NeonColourCard(
+    color: Int,
+    onColorChange: (Int) -> Unit
+) {
+    var hexDraft by remember(color) { mutableStateOf(LoadingIndicatorStyle.toHexRgb(color)) }
+    val hexIsValid = LoadingIndicatorStyle.parseHexColor(hexDraft) != null
+
     AppCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(color))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            )
+            Spacer(Modifier.width(Spacing.md))
+            Column {
+                Text(
+                    text = "Current colour",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = LoadingIndicatorStyle.toHexRgb(color).uppercase(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        Spacer(Modifier.height(Spacing.lg))
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            LoadingIndicatorStyle.NEON_PALETTE.forEach { preset ->
+                val selected = preset == color
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(preset))
+                        .border(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                            shape = CircleShape
+                        )
+                        .clickable { onColorChange(preset) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = Color(LoadingIndicatorStyle.contrastColor(preset)),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(Spacing.lg))
+        AppTextField(
+            value = hexDraft,
+            onValueChange = { typed ->
+                hexDraft = typed
+                LoadingIndicatorStyle.parseHexColor(typed)?.let { onColorChange(it) }
+            },
+            label = "Any neon colour (hex)",
+            supporting = if (hexIsValid) "Applied to the indicator" else "Format: #RRGGBB",
+            isError = hexDraft.isNotBlank() && !hexIsValid,
+            monospace = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
+        )
+
+        Spacer(Modifier.height(Spacing.lg))
         Text(
-            text = "Neon spectrum",
+            text = "Spectrum",
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(Modifier.height(Spacing.xs))
         Text(
-            text = "The ring cycles through these five hues by design, so its colour is fixed. " +
-                "Use another style if you want to choose a colour.",
+            text = "The ring cycles through these shades of your colour.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(Modifier.height(Spacing.md))
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.md)) {
-            LoadingIndicatorStyle.NEON_PALETTE.forEachIndexed { index, neon ->
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        modifier = Modifier
-                            .size(26.dp)
-                            .clip(CircleShape)
-                            .background(Color(neon))
-                    )
-                    Spacer(Modifier.height(Spacing.xs))
-                    Text(
-                        text = labels[index],
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            LoadingIndicatorStyle.neonSpectrum(color).forEach { neon ->
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color(neon))
+                )
             }
         }
     }

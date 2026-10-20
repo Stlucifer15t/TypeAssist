@@ -8,7 +8,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.SweepGradient
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -55,6 +57,12 @@ class OverlayManager(private val context: Context) {
 
     /** Colour of the loading indicator, from Settings -> Indicator colour. */
     private var indicatorColor: Int = LoadingIndicatorStyle.DEFAULT_COLOR
+
+    /** Whether the indicator wears the neon look, whatever style is selected. */
+    private var indicatorNeon: Boolean = false
+
+    /** The neon colour the indicator (and the spectrum ring) is built from. */
+    private var indicatorNeonColor: Int = LoadingIndicatorStyle.DEFAULT_NEON_COLOR
 
     /** Size multiplier of the loading indicator, from Settings -> Indicator size. */
     private var indicatorScale: Float = 1f
@@ -103,8 +111,19 @@ class OverlayManager(private val context: Context) {
             if (loadingView != null) return@post
             clearLoadingAnimators()
             val rawStyle = try { config.loadingIndicatorStyle } catch (_: Exception) { "classic" }
-            val style = (rawStyle as? String ?: "classic").ifBlank { "classic" }
-            indicatorColor = LoadingIndicatorStyle.effectiveColor(style, config.loadingIndicatorColor)
+            val style = LoadingIndicatorStyle.normalizeStyle(
+                (rawStyle as? String ?: "classic").ifBlank { "classic" }
+            )
+            val rawNeon = try { config.loadingIndicatorNeon } catch (_: Exception) { false }
+            indicatorNeon = rawNeon as? Boolean ?: false
+            val rawNeonColor = try { config.loadingIndicatorNeonColor } catch (_: Exception) { 0 }
+            indicatorNeonColor = LoadingIndicatorStyle.sanitizeNeonColor(rawNeonColor as? Int ?: 0)
+            indicatorColor = LoadingIndicatorStyle.effectiveColor(
+                style,
+                config.loadingIndicatorColor,
+                indicatorNeon,
+                indicatorNeonColor
+            )
             indicatorScale = LoadingIndicatorStyle.scaleOf(config.loadingIndicatorSizePercent)
             val content = when (style) {
                 "dots" -> createDotsView()
@@ -112,10 +131,19 @@ class OverlayManager(private val context: Context) {
                 "bars" -> createBarsView()
                 "typing" -> createTypingView()
                 "pill" -> createPillView()
-                "neon" -> createNeonRingView()
+                "orbit" -> createOrbitView()
+                "dotsring" -> createDotRingView()
+                "wave" -> createWaveView()
+                "pulsering" -> createPulseRingView()
+                LoadingIndicatorStyle.STYLE_SPECTRUM -> createSpectrumRingView()
                 else -> createClassicView()
             }
-            loadingView = content
+            // The spectrum ring draws its own glow, so only the other styles get the halo.
+            loadingView = if (indicatorNeon && style != LoadingIndicatorStyle.STYLE_SPECTRUM) {
+                withNeonHalo(content, indicatorNeonColor)
+            } else {
+                content
+            }
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -361,11 +389,17 @@ class OverlayManager(private val context: Context) {
      * head and a breathing glow. Drawn by [NeonRingView] instead of a tinted ProgressBar so the
      * glow, trail and core can all follow the colour the user picked.
      */
-    private fun createNeonRingView(): View {
+    private fun createSpectrumRingView(): View {
         val container = FrameLayout(context).apply {
             setPadding(sdp(6), sdp(6), sdp(6), sdp(6))
         }
-        val ring = NeonRingView(context, LoadingIndicatorStyle.NEON_PALETTE.toIntArray(), sdpF(3.5f)).apply {
+        // The spectrum is derived from the chosen neon colour, so picking another hue re-tints the
+        // whole ring instead of the palette being locked.
+        val ring = NeonRingView(
+            context,
+            LoadingIndicatorStyle.neonSpectrum(indicatorNeonColor).toIntArray(),
+            sdpF(3.5f)
+        ).apply {
             layoutParams = FrameLayout.LayoutParams(sdp(52), sdp(52), Gravity.CENTER)
         }
         val core = View(context).apply {
@@ -407,6 +441,166 @@ class OverlayManager(private val context: Context) {
             start()
         }
         loadingAnimators.addAll(listOf(spin, breathe, coreScaleX, coreScaleY))
+        return container
+    }
+
+    /**
+     * Orbit: a bright core with a single dot circling it. The dot is a child of a spinning
+     * container, so the rotation is what carries it around the core.
+     */
+    private fun createOrbitView(): View {
+        val container = FrameLayout(context)
+        val core = View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(12), sdp(12), Gravity.CENTER)
+            background = circleDrawable(indicatorColor)
+            elevation = dpF(6f)
+        }
+        container.addView(core)
+        val spinner = FrameLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(40), sdp(40), Gravity.CENTER)
+        }
+        val satellite = View(context).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(8), sdp(8), Gravity.CENTER)
+            background = circleDrawable(indicatorColor)
+            elevation = dpF(5f)
+            // Pushed to the right of the core; the container's rotation carries it around.
+            translationX = sdpF(15f)
+        }
+        spinner.addView(satellite)
+        container.addView(spinner)
+
+        val spin = ObjectAnimator.ofFloat(spinner, View.ROTATION, 0f, 360f).apply {
+            duration = 1400
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            start()
+        }
+        loadingAnimators.add(spin)
+        return container
+    }
+
+    /** Dot ring: five dots on a circle, all turning together around the centre. */
+    private fun createDotRingView(): View {
+        val container = FrameLayout(context)
+        val spinner = FrameLayout(context).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(44), sdp(44), Gravity.CENTER)
+        }
+        repeat(5) { index ->
+            val angle = 2.0 * Math.PI * index / 5.0
+            val dot = View(context).apply {
+                layoutParams = FrameLayout.LayoutParams(sdp(8), sdp(8), Gravity.CENTER)
+                background = circleDrawable(indicatorColor)
+                elevation = dpF(5f)
+                translationX = sdpF(16f) * cos(angle).toFloat()
+                translationY = sdpF(16f) * sin(angle).toFloat()
+            }
+            spinner.addView(dot)
+        }
+        container.addView(spinner)
+
+        val spin = ObjectAnimator.ofFloat(spinner, View.ROTATION, 0f, 360f).apply {
+            duration = 1400
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            start()
+        }
+        loadingAnimators.add(spin)
+        return container
+    }
+
+    /** Wave: bars rolling through a sine wave, each a beat behind the one before it. */
+    private fun createWaveView(): View {
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        val bars = mutableListOf<View>()
+        repeat(5) { index ->
+            val bar = View(context).apply {
+                layoutParams = LinearLayout.LayoutParams(sdp(5), sdp(18)).apply {
+                    setMargins(sdp(2), 0, sdp(2), 0)
+                }
+                background = GradientDrawable().apply {
+                    setColor(indicatorColor)
+                    cornerRadius = sdpF(2.5f)
+                }
+                elevation = dpF(4f)
+                // Scale from the bottom, so the bars grow upwards out of the baseline.
+                pivotY = sdpF(18f)
+            }
+            container.addView(bar)
+            bars += bar
+        }
+        // One animator drives every bar, so the crest travels along them as one wave.
+        val wave = ValueAnimator.ofFloat(0f, (2.0 * Math.PI).toFloat()).apply {
+            duration = 1400
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener { anim ->
+                val phase = anim.animatedValue as Float
+                bars.forEachIndexed { index, bar ->
+                    val angle = phase - index * 0.9f
+                    bar.scaleY = 0.3f + 0.7f * ((sin(angle.toDouble()).toFloat() + 1f) / 2f)
+                }
+            }
+            start()
+        }
+        loadingAnimators.add(wave)
+        return container
+    }
+
+    /** Pulse ring: two rings expanding outwards, half a cycle apart. */
+    private fun createPulseRingView(): View {
+        val container = FrameLayout(context)
+        val rings = mutableListOf<View>()
+        repeat(2) { index ->
+            val ring = View(context).apply {
+                layoutParams = FrameLayout.LayoutParams(sdp(40), sdp(40), Gravity.CENTER)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.TRANSPARENT)
+                    setStroke(sdp(2), indicatorColor)
+                }
+            }
+            container.addView(ring)
+            rings += ring
+        }
+        val pulse = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1400
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener { anim ->
+                val phase = anim.animatedValue as Float
+                rings.forEachIndexed { index, ring ->
+                    val t = (phase + index * 0.5f) % 1f
+                    ring.scaleX = 0.45f + 0.55f * t
+                    ring.scaleY = ring.scaleX
+                    ring.alpha = 0.95f * (1f - t)
+                }
+            }
+            start()
+        }
+        loadingAnimators.add(pulse)
+        return container
+    }
+
+    /**
+     * The neon look: the indicator sits in a soft halo of its own colour, the way a lit tube
+     * spills light onto the surface around it. The spectrum ring brings its own glow, so it is
+     * never wrapped.
+     */
+    private fun withNeonHalo(content: View, color: Int): View {
+        val container = FrameLayout(context)
+        // The halo is wider than the indicator, so the light spills out around it.
+        val halo = NeonHaloView(context, color).apply {
+            layoutParams = FrameLayout.LayoutParams(sdp(64), sdp(64), Gravity.CENTER)
+        }
+        container.addView(halo)
+        container.addView(content, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
         return container
     }
 
@@ -914,6 +1108,36 @@ class OverlayManager(private val context: Context) {
     companion object {
         /** How long the Accept / Reject / Retry chip stays on screen before it hides itself. */
         const val RESULT_CHIP_TIMEOUT_MS = 6000L
+    }
+}
+
+/**
+ * A soft radial halo in the neon colour, the way a lit tube spills light onto the surface around
+ * it. Drawn behind the indicator itself.
+ */
+private class NeonHaloView(
+    context: Context,
+    private val color: Int
+) : View(context) {
+
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    override fun onDraw(canvas: Canvas) {
+        val radius = minOf(width, height) / 2f
+        if (radius <= 0f) return
+        paint.shader = RadialGradient(
+            width / 2f,
+            height / 2f,
+            radius,
+            intArrayOf(
+                LoadingIndicatorStyle.withAlpha(color, 0),
+                LoadingIndicatorStyle.withAlpha(color, 110),
+                LoadingIndicatorStyle.withAlpha(color, 0)
+            ),
+            floatArrayOf(0f, 0.55f, 1f),
+            Shader.TileMode.CLAMP
+        )
+        canvas.drawCircle(width / 2f, height / 2f, radius, paint)
     }
 }
 

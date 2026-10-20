@@ -122,6 +122,39 @@ class ConfigMigrationsTest {
     }
 
     @Test
+    fun theOldNeonStyleBecomesTheSpectrumRingWithTheNeonLookOn() {
+        val legacy = Gson().fromJson(
+            """{"configVersion":4,"loadingIndicatorStyle":"neon"}""",
+            AppConfig::class.java
+        )
+
+        val migrated = ConfigMigrations.apply(legacy)
+
+        assertEquals(LoadingIndicatorStyle.STYLE_SPECTRUM, migrated.loadingIndicatorStyle)
+        assertTrue(migrated.loadingIndicatorNeon)
+        // The colour the spectrum is built from falls back to the default hue.
+        assertEquals(
+            LoadingIndicatorStyle.DEFAULT_NEON_COLOR,
+            migrated.loadingIndicatorNeonColor
+        )
+    }
+
+    @Test
+    fun aMissingNeonColourIsRestoredForCurrentConfigsToo() {
+        val config = Gson().fromJson(
+            """{"configVersion":$CURRENT_CONFIG_VERSION}""",
+            AppConfig::class.java
+        )
+
+        val migrated = ConfigMigrations.apply(config)
+
+        assertEquals(
+            LoadingIndicatorStyle.DEFAULT_NEON_COLOR,
+            migrated.loadingIndicatorNeonColor
+        )
+    }
+
+    @Test
     fun currentConfigsKeepTheirChosenValues() {
         val config = createDefaultConfig().copy(
             showResultChip = false,

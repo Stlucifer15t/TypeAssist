@@ -1,6 +1,8 @@
 package com.typeassist.app.data
 
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Pure helpers for the floating loading indicator's look (colour + size).
@@ -14,7 +16,13 @@ object LoadingIndicatorStyle {
     /** Opaque white - the colour the indicator has always used. */
     const val DEFAULT_COLOR: Int = -1 // 0xFFFFFFFF
 
-    /** Built-in, high-saturation colours used by the animated neon spectrum (and locked in Settings). */
+    /** Electric cyan - the default neon colour, and the first swatch of the neon picker. */
+    const val DEFAULT_NEON_COLOR: Int = 0xFF00F5FF.toInt()
+
+    /**
+     * The neon colours on offer. Picking one re-tints the whole spectrum: the ring's gradient is
+     * derived from the chosen hue rather than being locked to a fixed set of colours.
+     */
     val NEON_PALETTE: List<Int> = listOf(
         0xFF00F5FF.toInt(), // Electric cyan
         0xFF0066FF.toInt(), // Laser blue
@@ -22,6 +30,19 @@ object LoadingIndicatorStyle {
         0xFFFF00D4.toInt(), // Neon magenta
         0xFFFF2A6D.toInt()  // Hot pink
     )
+
+    /** The rotating spectrum ring. Older configs stored this style under the id "neon". */
+    const val STYLE_SPECTRUM: String = "spectrum"
+
+    /** The style id older configs used for the spectrum ring. */
+    const val LEGACY_STYLE_NEON: String = "neon"
+
+    /**
+     * How far the hue is rotated for each step of the spectrum. The first entry is the chosen
+     * colour itself, the rest walk around the colour wheel, so the ring keeps the rainbow sweep
+     * while wearing the hue the user picked.
+     */
+    private val SPECTRUM_HUE_OFFSETS = floatArrayOf(0f, 36f, 72f, 108f, 144f)
 
     /**
      * The style id from a stored value of any shape (older configs stored it untyped, and Gson can
@@ -32,9 +53,22 @@ object LoadingIndicatorStyle {
         return if (raw.isNullOrBlank()) "classic" else raw
     }
 
-    /** Neon uses its own vivid palette; other styles use the user's selected colour. */
-    fun effectiveColor(style: String, picked: Int): Int =
-        if (style == "neon") NEON_PALETTE.first() else sanitizeColor(picked)
+    /** True for the rotating spectrum ring, which is always drawn in neon colours. */
+    fun isSpectrumStyle(style: String): Boolean = style == STYLE_SPECTRUM
+
+    /**
+     * The style id a stored value stands for. Older configs stored the spectrum ring under the id
+     * "neon"; that is the same animation, so it is simply renamed.
+     */
+    fun normalizeStyle(style: String): String =
+        if (style == LEGACY_STYLE_NEON) STYLE_SPECTRUM else style
+
+    /**
+     * The colour the indicator body is drawn in: the neon colour while the neon look is on, the
+     * colour picked in Settings otherwise. The spectrum ring is always neon.
+     */
+    fun effectiveColor(style: String, picked: Int, neon: Boolean, neonColor: Int): Int =
+        if (neon || isSpectrumStyle(style)) sanitizeNeonColor(neonColor) else sanitizeColor(picked)
 
     const val DEFAULT_SIZE_PERCENT: Int = 100
     const val MIN_SIZE_PERCENT: Int = 50
@@ -61,6 +95,12 @@ object LoadingIndicatorStyle {
      */
     fun sanitizeColor(stored: Int): Int = if (stored == 0) DEFAULT_COLOR else stored
 
+    /**
+     * Same idea for the neon colour: `0` means "never set" (Gson writes 0 for a missing int), not
+     * "transparent black", so it falls back to the default neon hue.
+     */
+    fun sanitizeNeonColor(stored: Int): Int = if (stored == 0) DEFAULT_NEON_COLOR else stored
+
     fun sanitizeSizePercent(stored: Int): Int =
         if (stored == 0) {
             DEFAULT_SIZE_PERCENT
@@ -70,6 +110,21 @@ object LoadingIndicatorStyle {
 
     /** Multiplier applied to every dp dimension of the overlay indicator. */
     fun scaleOf(sizePercent: Int): Float = sanitizeSizePercent(sizePercent) / 100f
+
+    /**
+     * The colours the spectrum ring cycles through, derived from the chosen neon colour by rotating
+     * its hue. Choosing a different neon colour therefore re-tints the whole animation instead of
+     * the palette being locked to one fixed rainbow.
+     */
+    fun neonSpectrum(base: Int): List<Int> {
+        val hsv = rgbToHsv(sanitizeNeonColor(base))
+        // Keep the spectrum vivid even when the picked colour is a little washed out.
+        val saturation = maxOf(hsv[1], 0.75f)
+        val value = maxOf(hsv[2], 0.85f)
+        return SPECTRUM_HUE_OFFSETS.map { offset ->
+            hsvToRgb((hsv[0] + offset) % 360f, saturation, value)
+        }
+    }
 
     /**
      * Parses `#RGB`, `#RRGGBB` or `#AARRGGBB` (the `#` is optional). Returns null when the text is
@@ -119,13 +174,62 @@ object LoadingIndicatorStyle {
     /** White core on dark colours, near-black core on pale ones. */
     fun contrastColor(color: Int): Int = if (luminance(color) > 0.6f) 0xFF101010.toInt() else 0xFFFFFFFF.toInt()
 
+    // --- Colour space helpers -----------------------------------------------------------------
+    // Android's Color.colorToHSV cannot be used here: this object is plain JVM code so the rules
+    // can be unit tested without an Android device.
+
+    /** The colour as hue (0..360), saturation (0..1) and value (0..1). */
+    private fun rgbToHsv(color: Int): FloatArray {
+        val r = ((color shr 16) and 0xFF) / 255f
+        val g = ((color shr 8) and 0xFF) / 255f
+        val b = (color and 0xFF) / 255f
+        val max = maxOf(r, g, b)
+        val min = minOf(r, g, b)
+        val delta = max - min
+        val hue = when {
+            delta == 0f -> 0f
+            max == r -> 60f * (((g - b) / delta) % 6f)
+            max == g -> 60f * (((b - r) / delta) + 2f)
+            else -> 60f * (((r - g) / delta) + 4f)
+        }
+        val saturation = if (max <= 0f) 0f else delta / max
+        return floatArrayOf(if (hue < 0f) hue + 360f else hue, saturation, max)
+    }
+
+    /** The inverse of [rgbToHsv]; always fully opaque. */
+    private fun hsvToRgb(hue: Float, saturation: Float, value: Float): Int {
+        val chroma = value * saturation
+        val hueSector = hue / 60f
+        val second = chroma * (1f - abs(hueSector % 2f - 1f))
+        val (r1, g1, b1) = when {
+            hueSector < 1f -> Triple(chroma, second, 0f)
+            hueSector < 2f -> Triple(second, chroma, 0f)
+            hueSector < 3f -> Triple(0f, chroma, second)
+            hueSector < 4f -> Triple(0f, second, chroma)
+            hueSector < 5f -> Triple(second, 0f, chroma)
+            else -> Triple(chroma, 0f, second)
+        }
+        val match = value - chroma
+        val r = ((r1 + match) * 255f).roundToInt().coerceIn(0, 255)
+        val g = ((g1 + match) * 255f).roundToInt().coerceIn(0, 255)
+        val b = ((b1 + match) * 255f).roundToInt().coerceIn(0, 255)
+        return 0xFF000000.toInt() or (r shl 16) or (g shl 8) or b
+    }
+
     /**
      * Normalises a freshly loaded config. Call it right after `Gson.fromJson(...)` because Gson
      * instantiates the class without running the constructor, so Kotlin defaults never apply.
      */
     fun sanitize(config: AppConfig): AppConfig {
         config.loadingIndicatorColor = sanitizeColor(config.loadingIndicatorColor)
+        config.loadingIndicatorNeonColor = sanitizeNeonColor(config.loadingIndicatorNeonColor)
         config.loadingIndicatorSizePercent = sanitizeSizePercent(config.loadingIndicatorSizePercent)
+        // "neon" used to be a style of its own. It is now the spectrum ring plus the neon look,
+        // so an old config keeps its ring and gains the glow that goes with it.
+        if (config.loadingIndicatorStyle == LEGACY_STYLE_NEON) {
+            config.loadingIndicatorStyle = STYLE_SPECTRUM
+            config.loadingIndicatorNeon = true
+        }
         if (styleIdOf(config.loadingIndicatorStyle) != config.loadingIndicatorStyle) {
             config.loadingIndicatorStyle = styleIdOf(config.loadingIndicatorStyle)
         }

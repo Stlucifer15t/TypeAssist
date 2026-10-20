@@ -7,7 +7,7 @@ package com.typeassist.app.data
  * `null` instead of its Kotlin default (the same problem [LoadingIndicatorStyle.sanitize] solves
  * for the indicator colour and size).
  */
-const val CURRENT_CONFIG_VERSION: Int = 4
+const val CURRENT_CONFIG_VERSION: Int = 5
 
 /**
  * Apps where screen reading is never used, preloaded into Settings → Screen context.
@@ -50,6 +50,9 @@ object ConfigMigrations {
 
     fun apply(config: AppConfig): AppConfig {
         var result = config
+        // The version the config was written with. The blocks below bump the stored version as they
+        // go, so the original number is what says which repairs are still owed.
+        val writtenVersion = result.configVersion
 
         // Configs written before version 2 predate the result chip, streaming and screen context,
         // so those settings must start from their intended defaults instead of Gson's zero values.
@@ -69,6 +72,26 @@ object ConfigMigrations {
         // A missing (or cleared) blocklist must never leave screen reading unguarded.
         if (result.screenContextBlockedPackages == null) {
             result = result.copy(screenContextBlockedPackages = defaultBlockedScreenPackages())
+        }
+
+        // Version 5 added the neon look: a toggle that applies the neon treatment to any style,
+        // plus the neon colour the spectrum is built from. The colour's default is a non-zero
+        // hue, so a config written before this version arrives with 0 and must be repaired.
+        if (writtenVersion < 5) {
+            var style = result.loadingIndicatorStyle
+            var neon = result.loadingIndicatorNeon
+            // The old "neon" style is now the spectrum ring with the neon look switched on.
+            if (style == LoadingIndicatorStyle.LEGACY_STYLE_NEON) {
+                style = LoadingIndicatorStyle.STYLE_SPECTRUM
+                neon = true
+            }
+            result = result.copy(
+                loadingIndicatorStyle = style,
+                loadingIndicatorNeon = neon,
+                loadingIndicatorNeonColor = LoadingIndicatorStyle.sanitizeNeonColor(
+                    result.loadingIndicatorNeonColor
+                )
+            )
         }
 
         // Version 3 added the generation parameters, the reply style and the history retention.
