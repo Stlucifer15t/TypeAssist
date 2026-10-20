@@ -378,7 +378,8 @@ fun LoadingStylePreview(
                                 modifier = Modifier
                                     .width(5.dp)
                                     .height(18.dp)
-                                    .scale(scaleX = 1f, scaleY = height, pivotY = 18.dp)
+                                    .scale(scaleX = 1f, scaleY = height)
+                                    .graphicsLayer { pivotY = 18f }
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(body)
                             )
