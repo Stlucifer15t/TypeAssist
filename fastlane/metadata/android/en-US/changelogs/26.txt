@@ -1,0 +1,4 @@
+Version 4.9.0
+
+• Restores the plain accessibility-service setup: everything works again after re-enabling "Prompt AI Accessibility Service" once (as documented on the Permissions screen).
+• The version announcement after an update now shows the installed release's real notes, not old ones.
