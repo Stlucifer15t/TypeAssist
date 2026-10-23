@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
     private var updateInfoState by mutableStateOf<GitHubRelease?>(null)
     private var appThemeMode by mutableStateOf(AppThemeMode.SYSTEM)
     private var showVersionAnnouncement by mutableStateOf(false)
+
+    /** The GitHub release for the installed version, fetched for the announcement dialog. */
+    private var announcementRelease by mutableStateOf<GitHubRelease?>(null)
     private lateinit var updateRepository: UpdateRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +56,15 @@ class MainActivity : ComponentActivity() {
             checkForUpdates()
         }
 
+        if (showVersionAnnouncement) {
+            // The announcement shows the installed release's own notes, so they are fetched here;
+            // until they arrive (or if this is offline) the dialog says something generic.
+            lifecycleScope.launch {
+                updateRepository.fetchReleaseForInstalledVersion()
+                    .onSuccess { announcementRelease = it }
+            }
+        }
+
         setContent {
             AppTheme(themeMode = appThemeMode) {
                 TypeAssistApp(
@@ -65,6 +77,7 @@ class MainActivity : ComponentActivity() {
                 if (showVersionAnnouncement) {
                     VersionAnnouncementDialog(
                         versionName = BuildConfig.VERSION_NAME,
+                        release = announcementRelease,
                         onDismiss = ::dismissVersionAnnouncement
                     )
                 } else {

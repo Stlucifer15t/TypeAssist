@@ -49,30 +49,14 @@ fun UpdateDialog(release: GitHubRelease, onDismiss: () -> Unit) {
 }
 
 /**
- * Shown once after the app is updated to a build worth explaining. The notes are written for the
- * person using the app, not for a changelog, so they stay short and concrete.
+ * Shown once after the app is updated. The notes come from the GitHub release of the installed
+ * version, so what it says actually matches what was installed; if the release could not be
+ * fetched (offline first launch, missing tag) a short generic note stands in.
  */
-private val announcementNotes = listOf(
-    "Text generation settings: temperature, top-p and an answer-length limit are now sent to " +
-        "Gemini, OpenAI-compatible endpoints and Cloudflare Workers AI, with Presets if you would " +
-        "rather not think about numbers.",
-    "Requests share one connection, so a second command to the same provider starts immediately " +
-        "instead of shaking hands again, and a dropped connection is retried once on its own.",
-    ".reply now reads the conversation and copies your own wording: your messages are quoted back " +
-        "to the model, and Settings > Behaviour > Drafted replies sets the tone and the length.",
-    "History keeps processed text for an hour instead of five minutes, and the window is yours to " +
-        "choose - from five minutes up to a day.",
-    "A new Usage tab next to History shows requests and tokens per provider, for this session and " +
-        "in total, so it is obvious what each model costs you.",
-    "Connection failures now say what to do next - offline, timeout, wrong key, used-up credit, " +
-        "region block - instead of one generic error.",
-    "Saving a provider connection no longer closes the app, and if Prompt AI ever stops " +
-        "unexpectedly it says why on the next start: the reason stays on your device, and one tap " +
-        "copies it."
-)
 @Composable
 fun VersionAnnouncementDialog(
     versionName: String,
+    release: GitHubRelease?,
     onDismiss: () -> Unit
 ) {
     AppDialog(
@@ -82,14 +66,17 @@ fun VersionAnnouncementDialog(
         confirmLabel = "Continue",
         onConfirm = onDismiss
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            announcementNotes.forEach { change ->
-                Text(
-                    text = change,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+        if (release?.body?.isNotBlank() == true) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                ReleaseNotes(release.body)
             }
+        } else {
+            Text(
+                text = "Prompt AI has been updated. Details of this release are on the project's " +
+                    "Releases page.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

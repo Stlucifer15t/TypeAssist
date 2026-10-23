@@ -12,4 +12,11 @@ interface GitHubApiService {
         @Path("owner") owner: String,
         @Path("repo") repo: String
     ): GitHubRelease
+
+    @GET("repos/{owner}/{repo}/releases/tags/{tag}")
+    suspend fun getReleaseByTag(
+        @Path("owner") owner: String,
+        @Path("repo") repo: String,
+        @Path("tag") tag: String
+    ): GitHubRelease
 }

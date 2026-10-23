@@ -46,6 +46,20 @@ class UpdateRepository(context: Context) {
         }
     }
 
+    /**
+     * The GitHub release that matches the *installed* version, for the once-per-update
+     * announcement: its notes are this build's own changelog, fetched by tag.
+     */
+    suspend fun fetchReleaseForInstalledVersion(
+        owner: String = RELEASE_OWNER,
+        repo: String = RELEASE_REPOSITORY
+    ): Result<GitHubRelease?> = try {
+        val tag = "v" + BuildConfig.VERSION_NAME
+        Result.success(apiService.getReleaseByTag(owner, repo, tag))
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     private fun isNewerVersion(newVersion: String, currentVersion: String): Boolean {
         val newParts = newVersion.split(".").map { it.toIntOrNull() ?: 0 }
         val currentParts = currentVersion.split(".").map { it.toIntOrNull() ?: 0 }
