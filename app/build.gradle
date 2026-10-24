@@ -149,7 +149,7 @@ dependencies {
     implementation libs.androidx.core.splashscreen
 
     // Navigation
-    implementation libs.navigation.compose
+    implementation libs.androidx.navigation.compose
 
     // Networking & JSON
     implementation libs.squareup.okhttp3.okhttp
