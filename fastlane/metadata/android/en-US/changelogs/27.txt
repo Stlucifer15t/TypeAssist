@@ -1,0 +1,7 @@
+Version 4.9.1
+
+• Big reliability release under the hood: one shared HTTP layer now handles timeouts, retries and streaming for every provider, so a dropped connection behaves the same on Gemini, Cloudflare and custom OpenAI-compatible endpoints.
+• Navigation rewritten on Android's standard Navigation library — the back button, tab switching and state restoration are more robust.
+• If the system stops the app mid-answer, the next launch tells you the request was interrupted instead of staying silent.
+• App navigation history (bottom-bar tabs and settings pages) is restored correctly after the app is killed in the background.
+• Smaller APK surface: version catalog cleanup and tighter ProGuard keep rules.
