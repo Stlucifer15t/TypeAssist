@@ -4,8 +4,6 @@ import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.GenConfig
 import com.typeassist.app.data.GenerationSettings
 import com.typeassist.app.data.TokenUsage
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,12 +21,7 @@ import java.io.IOException
  * 429, 5xx) is retried once; a failure mid-answer is reported instead, because the answer may
  * already be in the text field.
  */
-class CustomApiClient(private val client: OkHttpClient) : AiProvider {
-
-    /** What the endpoint said this request cost, when it said anything. */
-    private var lastUsage: TokenUsage? = null
-
-    override fun reportedUsage(): TokenUsage? = lastUsage
+class CustomApiClient(client: OkHttpClient) : BaseApiClient(client) {
 
     override fun generateResponse(
         prompt: String,
@@ -37,104 +30,57 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         image: PromptImage?,
         callback: (Result<String>) -> Unit
     ) {
-        callCustomApi(
-            baseUrl = config.customApiConfig.baseUrl,
-            apiKey = config.customApiConfig.apiKey,
-            model = config.customApiConfig.model,
-            prompt = prompt,
-            userText = userText,
-            generation = GenerationSettings.sanitize(config.generationConfig),
-            timeoutSeconds = config.apiTimeoutSeconds,
-            image = image,
-            callback = callback
-        )
-    }
-
-    fun callCustomApi(
-        baseUrl: String,
-        apiKey: String,
-        model: String,
-        prompt: String,
-        userText: String,
-        generation: GenConfig,
-        timeoutSeconds: Long,
-        image: PromptImage? = null,
-        callback: (Result<String>) -> Unit
-    ) {
-        lastUsage = null
         val request = try {
-            buildRequest(baseUrl, apiKey, model, prompt, userText, generation, image = image, stream = false)
+            buildRequest(
+                baseUrl = config.customApiConfig.baseUrl,
+                apiKey = config.customApiConfig.apiKey,
+                model = config.customApiConfig.model,
+                prompt = prompt,
+                userText = userText,
+                generation = GenerationSettings.sanitize(config.generationConfig),
+                image = image,
+                stream = false
+            )
         } catch (e: Exception) {
             callback(Result.failure(e))
             return
         }
 
-        val timedClient = HttpClients.withTimeout(timeoutSeconds, client)
-
-        fun send(attempt: Int) {
-            val call = timedClient.newCall(request)
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (call.isCanceled()) return
-                    if (attempt < HttpRetry.MAX_ATTEMPTS && HttpRetry.shouldRetry(e)) {
-                        HttpRetry.schedule(attempt) { send(attempt + 1) }
-                        return
-                    }
-                    callback(Result.failure(e))
+        executeRequest(
+            request = request,
+            timeoutSeconds = config.apiTimeoutSeconds,
+            onSuccess = { resp ->
+                val responseData = resp.body?.string() ?: throw IOException("Empty response body")
+                val json = JSONObject(responseData)
+                lastUsage = usageOf(json)
+                val choices = json.optJSONArray("choices")
+                    ?: throw IOException(
+                        "The provider did not return a chat completion. Check that the " +
+                            "Base URL points at an OpenAI-compatible endpoint."
+                    )
+                if (choices.length() == 0) {
+                    throw IOException("The provider returned no choices.")
                 }
-
-                override fun onResponse(call: Call, response: Response) {
-                    response.use { resp ->
-                        if (!resp.isSuccessful) {
-                            val body = try {
-                                resp.body?.string()
-                            } catch (e: Exception) {
-                                null
-                            }
-                            if (attempt < HttpRetry.MAX_ATTEMPTS && HttpRetry.shouldRetryStatus(resp.code)) {
-                                HttpRetry.schedule(attempt, retryAfterSeconds(resp)) { send(attempt + 1) }
-                                return
-                            }
-                            callback(Result.failure(IOException("${resp.code}: ${body ?: ""}".trim())))
-                            return
-                        }
-                        try {
-                            val responseData = resp.body?.string() ?: throw IOException("Empty response body")
-                            val json = JSONObject(responseData)
-                            lastUsage = usageOf(json)
-                            val choices = json.optJSONArray("choices")
-                                ?: throw IOException(
-                                    "The provider did not return a chat completion. Check that the " +
-                                        "Base URL points at an OpenAI-compatible endpoint."
-                                )
-                            if (choices.length() == 0) {
-                                throw IOException("The provider returned no choices.")
-                            }
-                            val message = choices.getJSONObject(0).optJSONObject("message")
-                            val resultText = message?.optString("content").orEmpty().ifBlank {
-                                choices.getJSONObject(0).optString("text")
-                            }
-                            if (resultText.isBlank()) {
-                                throw IOException(
-                                    "The provider returned an empty response. Check the model ID and " +
-                                        "that the account can use it."
-                                )
-                            }
-                            callback(Result.success(cleanModelResponse(resultText)))
-                        } catch (e: Exception) {
-                            callback(Result.failure(e))
-                        }
-                    }
+                val message = choices.getJSONObject(0).optJSONObject("message")
+                val resultText = message?.optString("content").orEmpty().ifBlank {
+                    choices.getJSONObject(0).optString("text")
                 }
-            })
-        }
-
-        send(1)
+                if (resultText.isBlank()) {
+                    throw IOException(
+                        "The provider returned an empty response. Check the model ID and " +
+                            "that the account can use it."
+                    )
+                }
+                resultText
+            },
+            onError = { code, body -> IOException("$code: ${body ?: ""}".trim()) },
+            callback = callback
+        )
     }
 
     /**
      * Streams the answer with `"stream": true`. Returns null when the request could not even be
-     * started, so the caller can fall back to [callCustomApi].
+     * started, so the caller can fall back to [generateResponse].
      *
      * The handle cancels the attempt currently in flight, since a retry replaces the first call.
      */
@@ -146,7 +92,6 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         onDelta: (String) -> Unit,
         callback: (Result<String>) -> Unit
     ): AiStream? {
-        val generation = GenerationSettings.sanitize(config.generationConfig)
         val request = try {
             buildRequest(
                 baseUrl = config.customApiConfig.baseUrl,
@@ -154,7 +99,7 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
                 model = config.customApiConfig.model,
                 prompt = prompt,
                 userText = userText,
-                generation = generation,
+                generation = GenerationSettings.sanitize(config.generationConfig),
                 image = image,
                 stream = true
             )
@@ -162,64 +107,17 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
             return null
         }
 
-        val timedClient = HttpClients.withTimeout(config.apiTimeoutSeconds, client)
-        var inFlight: Call? = null
-        var streamedAnything = false
-
-        fun send(attempt: Int) {
-            val call = timedClient.newCall(request)
-            inFlight = call
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (call.isCanceled()) return
-                    if (!streamedAnything && attempt < HttpRetry.MAX_ATTEMPTS && HttpRetry.shouldRetry(e)) {
-                        HttpRetry.schedule(attempt) { send(attempt + 1) }
-                        return
-                    }
-                    callback(Result.failure(e))
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    response.use { resp ->
-                        if (!resp.isSuccessful) {
-                            val body = try {
-                                resp.body?.string()
-                            } catch (e: Exception) {
-                                null
-                            }
-                            if (!streamedAnything && attempt < HttpRetry.MAX_ATTEMPTS &&
-                                HttpRetry.shouldRetryStatus(resp.code)
-                            ) {
-                                HttpRetry.schedule(attempt, retryAfterSeconds(resp)) { send(attempt + 1) }
-                                return
-                            }
-                            callback(Result.failure(IOException("${resp.code}: ${body ?: ""}".trim())))
-                            return
-                        }
-                        val complete = SseStreamReader.read(resp, { delta ->
-                            streamedAnything = true
-                            onDelta(delta)
-                        }, StreamChunkParser::openAiDelta)
-                        if (call.isCanceled()) return
-                        complete.fold(
-                            onSuccess = { text ->
-                                if (text.isBlank()) {
-                                    callback(Result.failure(IOException("The provider returned an empty response.")))
-                                } else {
-                                    callback(Result.success(cleanModelResponse(text)))
-                                }
-                            },
-                            onFailure = { callback(Result.failure(it)) }
-                        )
-                    }
-                }
-            })
-        }
-
-        send(1)
-        return AiStream { inFlight?.cancel() }
+        return executeStream(
+            request = request,
+            timeoutSeconds = config.apiTimeoutSeconds,
+            onDelta = onDelta,
+            parseDelta = StreamChunkParser::openAiDelta,
+            onError = { code, body -> IOException("$code: ${body ?: ""}".trim()) },
+            callback = callback
+        )
     }
 
+    /** Builds the chat-completions request, shared by the streaming and non-streaming calls. */
     internal fun buildRequest(
         baseUrl: String,
         apiKey: String,
@@ -239,8 +137,8 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         systemMessage.put("content", prompt)
         messagesArray.put(systemMessage)
 
-        // User message. With an image the content becomes the OpenAI multimodal array, otherwise a
-        // plain string (which every OpenAI-compatible endpoint understands).
+        // User message. With an image the content becomes the OpenAI multimodal array; otherwise a
+        // plain string, which every OpenAI-compatible endpoint understands.
         val userMessage = JSONObject()
         userMessage.put("role", "user")
         if (image == null) {
@@ -309,8 +207,4 @@ class CustomApiClient(private val client: OkHttpClient) : AiProvider {
         if (prompt <= 0 && completion <= 0) return null
         return TokenUsage(prompt, completion)
     }
-
-    private fun retryAfterSeconds(response: Response): Long? =
-        response.header("Retry-After")?.trim()?.toLongOrNull()
-
 }

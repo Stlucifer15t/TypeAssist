@@ -4,8 +4,6 @@ import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.GenConfig
 import com.typeassist.app.data.GenerationSettings
 import com.typeassist.app.data.TokenUsage
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -22,12 +20,7 @@ import java.io.IOException
  * Settings → Text generation apply here too. This endpoint has no streaming mode, so it is always
  * one request — which is also why a retry is cheap and safe when nothing came back.
  */
-class CloudflareApiClient(private val client: OkHttpClient) : AiProvider {
-
-    /** What Workers AI said this request cost, when it said anything. */
-    private var lastUsage: TokenUsage? = null
-
-    override fun reportedUsage(): TokenUsage? = lastUsage
+class CloudflareApiClient(client: OkHttpClient) : BaseApiClient(client) {
 
     override fun generateResponse(
         prompt: String,
@@ -37,28 +30,50 @@ class CloudflareApiClient(private val client: OkHttpClient) : AiProvider {
         callback: (Result<String>) -> Unit
     ) {
         // Workers AI text models do not take the screenshot; the text path is unchanged.
-        callCloudflare(
-            accountId = config.cloudflareConfig.accountId,
-            apiToken = config.cloudflareConfig.apiToken,
-            model = config.cloudflareConfig.model,
-            prompt = prompt,
-            userText = userText,
-            generation = GenerationSettings.sanitize(config.generationConfig),
+        val request = try {
+            buildRequest(
+                accountId = config.cloudflareConfig.accountId,
+                apiToken = config.cloudflareConfig.apiToken,
+                model = config.cloudflareConfig.model,
+                prompt = prompt,
+                userText = userText,
+                generation = GenerationSettings.sanitize(config.generationConfig)
+            )
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+            return
+        }
+
+        executeRequest(
+            request = request,
             timeoutSeconds = config.apiTimeoutSeconds,
+            onSuccess = { resp ->
+                val responseData = resp.body?.string() ?: throw IOException("Empty response body")
+                val result = JSONObject(responseData).optJSONObject("result")
+                lastUsage = usageOf(result)
+                val resultText = result?.optString("response").orEmpty()
+                if (resultText.isBlank()) {
+                    throw IOException(
+                        "Cloudflare returned an empty answer. Check that the model ID is a " +
+                            "text-generation model such as @cf/meta/llama-3-8b-instruct."
+                    )
+                }
+                resultText
+            },
+            onError = { code, body -> IOException(getErrorMessage(code, body)) },
             callback = callback
         )
     }
 
-    fun callCloudflare(
+    /** Builds the Workers AI request. */
+    private fun buildRequest(
         accountId: String,
         apiToken: String,
         model: String,
         prompt: String,
         userText: String,
-        generation: GenConfig,
-        timeoutSeconds: Long,
-        callback: (Result<String>) -> Unit
-    ) {
+        generation: GenConfig
+    ): Request {
         val jsonBody = JSONObject()
         val messagesArray = JSONArray()
 
@@ -83,62 +98,11 @@ class CloudflareApiClient(private val client: OkHttpClient) : AiProvider {
         val requestBody = jsonBody.toString().toRequestBody("application/json".toMediaType())
         val url = "https://api.cloudflare.com/client/v4/accounts/$accountId/ai/run/$model"
 
-        val request = Request.Builder()
+        return Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $apiToken")
             .post(requestBody)
             .build()
-
-        val timedClient = HttpClients.withTimeout(timeoutSeconds, client)
-
-        fun send(attempt: Int) {
-            val call = timedClient.newCall(request)
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    if (call.isCanceled()) return
-                    if (attempt < HttpRetry.MAX_ATTEMPTS && HttpRetry.shouldRetry(e)) {
-                        HttpRetry.schedule(attempt) { send(attempt + 1) }
-                        return
-                    }
-                    callback(Result.failure(e))
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    response.use { resp ->
-                        if (!resp.isSuccessful) {
-                            val errorBody = try {
-                                resp.body?.string()
-                            } catch (e: Exception) {
-                                null
-                            }
-                            if (attempt < HttpRetry.MAX_ATTEMPTS && HttpRetry.shouldRetryStatus(resp.code)) {
-                                HttpRetry.schedule(attempt, retryAfterSeconds(resp)) { send(attempt + 1) }
-                                return
-                            }
-                            callback(Result.failure(IOException(getErrorMessage(resp.code, errorBody))))
-                            return
-                        }
-                        try {
-                            val responseData = resp.body?.string() ?: throw IOException("Empty response body")
-                            val result = JSONObject(responseData).optJSONObject("result")
-                            lastUsage = usageOf(result)
-                            val resultText = result?.optString("response").orEmpty()
-                            if (resultText.isBlank()) {
-                                throw IOException(
-                                    "Cloudflare returned an empty answer. Check that the model ID is a " +
-                                        "text-generation model such as @cf/meta/llama-3-8b-instruct."
-                                )
-                            }
-                            callback(Result.success(cleanModelResponse(resultText)))
-                        } catch (e: Exception) {
-                            callback(Result.failure(e))
-                        }
-                    }
-                }
-            })
-        }
-
-        send(1)
     }
 
     /** `result.usage.prompt_tokens` / `completion_tokens`, when Workers AI reports them. */
@@ -149,9 +113,6 @@ class CloudflareApiClient(private val client: OkHttpClient) : AiProvider {
         if (prompt <= 0 && completion <= 0) return null
         return TokenUsage(prompt, completion)
     }
-
-    private fun retryAfterSeconds(response: Response): Long? =
-        response.header("Retry-After")?.trim()?.toLongOrNull()
 
     private fun getErrorMessage(code: Int, body: String?): String {
         return try {

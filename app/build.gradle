@@ -2,6 +2,7 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'org.jetbrains.kotlin.plugin.compose' version '2.0.0'
+    alias(libs.plugins.detekt)
 }
 
 // Keep local signing credentials out of source control. CI supplies these values
@@ -22,6 +23,7 @@ def releaseSigningConfigured = [releaseStoreFile, releaseStorePassword, releaseK
 android {
     namespace = 'com.typeassist.app'
     compileSdk = 35
+
 
     defaultConfig {
         applicationId = "com.typeassist.app"
@@ -123,37 +125,47 @@ android {
     }
 }
 
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(files("$rootDir/config/detekt.yml"))
+    parallel = true
+}
+
 dependencies {
-    implementation 'androidx.core:core-ktx:1.12.0'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
-    
+    implementation libs.androidx.core.ktx
+    implementation libs.androidx.lifecycle.runtime.ktx
+
     // --- JETPACK COMPOSE ---
-    implementation platform('androidx.compose:compose-bom:2024.06.00')
-    implementation 'androidx.activity:activity-compose:1.9.0'
+    implementation platform(libs.androidx.compose.bom)
+    implementation libs.androidx.activity.compose
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
-    implementation 'com.google.android.material:material:1.12.0'
-    
+    implementation libs.material
+
     // Icons
     implementation 'androidx.compose.material:material-icons-extended'
-    implementation 'androidx.core:core-splashscreen:1.0.1'
+    implementation libs.androidx.core.splashscreen
+
+    // Navigation
+    implementation libs.navigation.compose
 
     // Networking & JSON
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
-    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
-    implementation 'com.google.code.gson:gson:2.10.1'
+    implementation libs.squareup.okhttp3.okhttp
+    implementation libs.squareup.retrofit2.retrofit
+    implementation libs.squareup.retrofit2.converter.gson
+    implementation libs.google.code.gson.gson
 
     // Markdown rendering for release notes
-    implementation 'com.github.jeziellago:compose-markdown:0.5.0'
+    implementation libs.compose.markdown
 
     // Testing
-    testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    androidTestImplementation platform('androidx.compose:compose-bom:2024.06.00')
+    testImplementation libs.junit.junit
+    androidTestImplementation libs.androidx.test.ext.junit
+    androidTestImplementation libs.androidx.test.espresso.espresso.core
+    androidTestImplementation libs.squareup.okhttp3.mockwebserver
+    androidTestImplementation platform(libs.androidx.compose.bom)
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'

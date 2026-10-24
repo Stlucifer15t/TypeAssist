@@ -81,3 +81,24 @@
 -keep class kotlin.Result { *; }
 
 -keepnames class com.typeassist.app.data.network.** { *; }
+
+# --- kotlinx.serialization ------------------------------------------------
+# Reflective serialization needs the annotations and generated serializers kept.
+-keepattributes RuntimeVisibleAnnotations, AnnotationDefault
+-keepclassmembers @kotlinx.serialization.Serializable class ** {
+    *** Companion;
+    *** INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keepclasseswithmembers class **$$serializer { *; }
+-keep,includedescriptorclasses class com.typeassist.app.**$$serializer { *; }
+-keepclassmembers class com.typeassist.app.** {
+    *** Companion;
+}
+
+# --- App API layer --------------------------------------------------------
+# Gson-serialized config classes keep their field names; the provider clients
+# are kept whole so stack traces stay readable after obfuscation.
+-keep class com.typeassist.app.api.** { *; }
+-keepnames class com.typeassist.app.data.** { *; }
+-keepattributes SourceFile, LineNumberTable

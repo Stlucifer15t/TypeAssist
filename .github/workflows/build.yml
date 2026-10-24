@@ -35,6 +35,31 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
+      - name: Lint
+        run: |
+          set -o pipefail
+          ./gradlew lintFullDebug --stacktrace 2>&1 | tee lint.log
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: |
+            lint.log
+            app/build/reports/lint-results-fullDebug.html
+            app/build/reports/lint-results-fullDebug.xml
+          if-no-files-found: warn
+
+      - name: Report lint errors
+        if: failure()
+        run: |
+          set +e
+          if [ -f lint.log ]; then
+            grep -E "Error:|error:|Lint found" lint.log | head -8 | \
+              while IFS= read -r line; do echo "::error::$line"; done
+          fi
+
       - name: Run unit tests
         run: |
           set -o pipefail

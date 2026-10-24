@@ -58,6 +58,14 @@ object UsageTracker {
         val key: String get() = "$provider|$model"
     }
 
+    /**
+     * Most provider-and-model rows kept at once. Every distinct model ID the user ever runs gets a
+     * row, and it lives in the stored totals forever; without a cap, years of model experiments
+     * would grow the stored JSON (and every screen that lists the rows) without limit. Small rows
+     * are dropped first: they matter least on a "where did my tokens go" screen.
+     */
+    const val MAX_ROWS: Int = 50
+
     data class Totals(
         val requests: Int,
         val promptTokens: Long,
@@ -139,6 +147,18 @@ object UsageTracker {
         row.completionTokens += completionTokens
         if (estimated) row.estimatedRequests += 1
         row.updatedAt = clock()
+        trim(table)
+    }
+
+    /** Keeps the [MAX_ROWS] rows with the most tokens; drops the rest, smallest first. */
+    private fun trim(table: LinkedHashMap<String, Row>) {
+        if (table.size <= MAX_ROWS) return
+        val keep = table.values
+            .sortedByDescending { it.totalTokens }
+            .take(MAX_ROWS)
+            .map { it.key }
+            .toSet()
+        table.entries.removeIf { it.key !in keep }
     }
 
     /** Tokens in [text], rounded up, never zero for text that exists. */

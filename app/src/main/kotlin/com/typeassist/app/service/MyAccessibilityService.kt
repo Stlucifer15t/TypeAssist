@@ -32,6 +32,7 @@ import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.UsageStore
 import com.typeassist.app.data.UsageTracker
 import com.typeassist.app.data.LoadingIndicatorStyle
+import com.typeassist.app.data.StreamRecoveryManager
 import com.typeassist.app.data.StreamThrottle
 import com.typeassist.app.ui.ThemePalettes
 import com.typeassist.app.utils.ScreenTextExtractor
@@ -92,6 +93,9 @@ class MyAccessibilityService : AccessibilityService() {
 
     /** The app's preferences, resolved once instead of by every accessibility event. */
     private val configPrefs by lazy { getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE) }
+
+    /** Tracks in-flight requests across process death, so a crash mid-answer is reported. */
+    private val streamRecovery by lazy { StreamRecoveryManager(configPrefs) }
     private val geminiApiClient = GeminiApiClient(client)
     private val cloudflareApiClient = CloudflareApiClient(client)
     private val customApiClient = CustomApiClient(client)
@@ -155,7 +159,31 @@ class MyAccessibilityService : AccessibilityService() {
         // Token totals are read back here so the usage tab shows the stored history, not just the
         // requests made since the phone was last restarted.
         UsageTracker.load(UsageStore(this).load())
+        reportInterruptedStream()
         Log.d(TAG, "Service Connected")
+    }
+
+    /**
+     * If this process died while a request was in flight, say so. There is no field to stream into
+     * any more, so the honest outcome is a clear message rather than silence. The record is then
+     * dropped: it described one request, which is now gone.
+     */
+    private fun reportInterruptedStream() {
+        try {
+            val pending = streamRecovery.pendingStream() ?: return
+            streamRecovery.clearPendingStream()
+            Log.w(
+                TAG,
+                "Previous ${pending.provider} request was interrupted by a process restart " +
+                    "(${pending.timestamp}); nothing was resumed"
+            )
+            overlayManager.showToast(
+                "The previous ${pending.provider} request was interrupted — try the command again"
+            )
+        } catch (e: Exception) {
+            // Recovery reporting must never keep the service from starting.
+            Log.w(TAG, "Could not report an interrupted request: ${e.message}")
+        }
     }
 
     private fun startPersistentNotification() {
@@ -641,6 +669,13 @@ class MyAccessibilityService : AccessibilityService() {
         overlayManager.showLoading(config)
         overlayManager.hideUndoButton()
         overlayManager.hideResultChip()
+        // Remember that a request is now in flight, so process death during it can be reported.
+        streamRecovery.savePendingStream(
+            provider = config.provider,
+            prompt = prompt,
+            userText = userText,
+            hasImage = image != null
+        )
 
         val provider = providerFor(config)
         val generation = ++streamGeneration
@@ -693,9 +728,10 @@ class MyAccessibilityService : AccessibilityService() {
     ) {
         performAICall(config, prompt, userText, image) { result ->
             uiHandler.post {
-                overlayManager.hideLoading()
-                result.onSuccess { aiText ->
-                    Log.d(TAG, "AI Success: ${aiText.take(50)}...")
+            overlayManager.hideLoading()
+            streamRecovery.clearPendingStream()
+            result.onSuccess { aiText ->
+                Log.d(TAG, "AI Success: ${aiText.take(50)}...")
                     recordUsage(config, lastCommand?.prompt.orEmpty(), lastCommand?.userText.orEmpty(), aiText)
                     if (node != null && node.refresh()) {
                         processAiResult(config, node, aiText, render)
@@ -913,6 +949,7 @@ class MyAccessibilityService : AccessibilityService() {
             activeStream = null
             activeStreamNode = null
             activeStreamPreText = null
+            streamRecovery.clearPendingStream()
             overlayManager.hideLoading()
             overlayManager.hideResultChip()
 
@@ -960,6 +997,7 @@ class MyAccessibilityService : AccessibilityService() {
         activeStreamPreText = null
         streamDeltaCount = 0
         streamGeneration++
+        streamRecovery.clearPendingStream()
         try { stream.cancel() } catch (e: Exception) { /* already gone */ }
         if (restoreOriginal && node != null && original != null) {
             restoreField(node, original)
