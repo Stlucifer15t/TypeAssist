@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.Build
 import android.util.Base64
 import android.view.Display
+import androidx.annotation.RequiresApi
 import com.typeassist.app.api.PromptImage
 import java.io.ByteArrayOutputStream
 import kotlin.math.max
@@ -55,6 +56,8 @@ object ScreenImageCapture {
         }
     }
 
+    /** Only ever called from the take-screenshot callback, which only exists on API 30+. */
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun AccessibilityService.ScreenshotResult.toPromptImage(): PromptImage? {
         val buffer = hardwareBuffer
         return try {
