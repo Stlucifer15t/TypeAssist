@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import com.typeassist.app.data.TokenUsage
 
 /**
  * Shared base for [AiProvider] implementations that talk to an HTTP endpoint.

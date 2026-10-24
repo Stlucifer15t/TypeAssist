@@ -74,6 +74,7 @@ import com.typeassist.app.ui.screens.SettingsScreen
 import com.typeassist.app.ui.screens.SnippetsScreen
 import com.typeassist.app.ui.screens.SystemPreviewScreen
 import com.typeassist.app.ui.screens.TestScreen
+import com.typeassist.app.ui.screens.UsageScreen
 import com.typeassist.app.ui.screens.WelcomeScreen
 import okhttp3.OkHttpClient
 

@@ -49,34 +49,79 @@ class CustomApiClient(client: OkHttpClient) : BaseApiClient(client) {
         executeRequest(
             request = request,
             timeoutSeconds = config.apiTimeoutSeconds,
-            onSuccess = { resp ->
-                val responseData = resp.body?.string() ?: throw IOException("Empty response body")
-                val json = JSONObject(responseData)
-                lastUsage = usageOf(json)
-                val choices = json.optJSONArray("choices")
-                    ?: throw IOException(
-                        "The provider did not return a chat completion. Check that the " +
-                            "Base URL points at an OpenAI-compatible endpoint."
-                    )
-                if (choices.length() == 0) {
-                    throw IOException("The provider returned no choices.")
-                }
-                val message = choices.getJSONObject(0).optJSONObject("message")
-                val resultText = message?.optString("content").orEmpty().ifBlank {
-                    choices.getJSONObject(0).optString("text")
-                }
-                if (resultText.isBlank()) {
-                    throw IOException(
-                        "The provider returned an empty response. Check the model ID and " +
-                            "that the account can use it."
-                    )
-                }
-                resultText
-            },
-            onError = { code, body -> IOException("$code: ${body ?: ""}".trim()) },
+            onSuccess = ::parseChatCompletion,
+            onError = ::httpError,
             callback = callback
         )
     }
+
+    /**
+     * Direct entry point used by the provider connection test: the same request the main path
+     * sends, with explicit credentials instead of a full [AppConfig]. Kept public so the test can
+     * exercise exactly what production uses.
+     */
+    fun callCustomApi(
+        baseUrl: String,
+        apiKey: String,
+        model: String,
+        prompt: String,
+        userText: String,
+        generation: GenConfig,
+        timeoutSeconds: Long,
+        callback: (Result<String>) -> Unit
+    ) {
+        val request = try {
+            buildRequest(
+                baseUrl = baseUrl,
+                apiKey = apiKey,
+                model = model,
+                prompt = prompt,
+                userText = userText,
+                generation = generation,
+                stream = false
+            )
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+            return
+        }
+
+        executeRequest(
+            request = request,
+            timeoutSeconds = timeoutSeconds,
+            onSuccess = ::parseChatCompletion,
+            onError = ::httpError,
+            callback = callback
+        )
+    }
+
+    /** Parses one successful chat-completions response, shared by generateResponse and callCustomApi. */
+    private fun parseChatCompletion(resp: Response): String {
+        val responseData = resp.body?.string() ?: throw IOException("Empty response body")
+        val json = JSONObject(responseData)
+        lastUsage = usageOf(json)
+        val choices = json.optJSONArray("choices")
+            ?: throw IOException(
+                "The provider did not return a chat completion. Check that the " +
+                    "Base URL points at an OpenAI-compatible endpoint."
+            )
+        if (choices.length() == 0) {
+            throw IOException("The provider returned no choices.")
+        }
+        val message = choices.getJSONObject(0).optJSONObject("message")
+        val resultText = message?.optString("content").orEmpty().ifBlank {
+            choices.getJSONObject(0).optString("text")
+        }
+        if (resultText.isBlank()) {
+            throw IOException(
+                "The provider returned an empty response. Check the model ID and " +
+                    "that the account can use it."
+            )
+        }
+        return resultText
+    }
+
+    private fun httpError(code: Int, body: String?): IOException =
+        IOException("$code: ${body ?: ""}".trim())
 
     /**
      * Streams the answer with `"stream": true`. Returns null when the request could not even be

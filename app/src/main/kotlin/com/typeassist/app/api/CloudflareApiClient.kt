@@ -47,20 +47,45 @@ class CloudflareApiClient(client: OkHttpClient) : BaseApiClient(client) {
         executeRequest(
             request = request,
             timeoutSeconds = config.apiTimeoutSeconds,
-            onSuccess = { resp ->
-                val responseData = resp.body?.string() ?: throw IOException("Empty response body")
-                val result = JSONObject(responseData).optJSONObject("result")
-                lastUsage = usageOf(result)
-                val resultText = result?.optString("response").orEmpty()
-                if (resultText.isBlank()) {
-                    throw IOException(
-                        "Cloudflare returned an empty answer. Check that the model ID is a " +
-                            "text-generation model such as @cf/meta/llama-3-8b-instruct."
-                    )
-                }
-                resultText
-            },
-            onError = { code, body -> IOException(getErrorMessage(code, body)) },
+            onSuccess = ::parseWorkersResponse,
+            onError = ::httpError,
+            callback = callback
+        )
+    }
+
+    /**
+     * Direct entry point used by the provider connection test: the same request the main path
+     * sends, with explicit credentials instead of a full [AppConfig].
+     */
+    fun callCloudflare(
+        accountId: String,
+        apiToken: String,
+        model: String,
+        prompt: String,
+        userText: String,
+        generation: GenConfig,
+        timeoutSeconds: Long,
+        callback: (Result<String>) -> Unit
+    ) {
+        val request = try {
+            buildRequest(
+                accountId = accountId,
+                apiToken = apiToken,
+                model = model,
+                prompt = prompt,
+                userText = userText,
+                generation = generation
+            )
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+            return
+        }
+
+        executeRequest(
+            request = request,
+            timeoutSeconds = timeoutSeconds,
+            onSuccess = ::parseWorkersResponse,
+            onError = ::httpError,
             callback = callback
         )
     }
@@ -104,6 +129,24 @@ class CloudflareApiClient(client: OkHttpClient) : BaseApiClient(client) {
             .post(requestBody)
             .build()
     }
+
+    /** Parses one successful Workers AI response, shared by generateResponse and callCloudflare. */
+    private fun parseWorkersResponse(resp: Response): String {
+        val responseData = resp.body?.string() ?: throw IOException("Empty response body")
+        val result = JSONObject(responseData).optJSONObject("result")
+        lastUsage = usageOf(result)
+        val resultText = result?.optString("response").orEmpty()
+        if (resultText.isBlank()) {
+            throw IOException(
+                "Cloudflare returned an empty answer. Check that the model ID is a " +
+                    "text-generation model such as @cf/meta/llama-3-8b-instruct."
+            )
+        }
+        return resultText
+    }
+
+    private fun httpError(code: Int, body: String?): IOException =
+        IOException(getErrorMessage(code, body))
 
     /** `result.usage.prompt_tokens` / `completion_tokens`, when Workers AI reports them. */
     private fun usageOf(result: JSONObject?): TokenUsage? {
