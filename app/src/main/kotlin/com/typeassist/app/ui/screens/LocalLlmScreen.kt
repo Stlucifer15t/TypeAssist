@@ -47,6 +47,7 @@ import com.typeassist.app.ui.components.AppTextField
 import com.typeassist.app.ui.components.AppTopBar
 import com.typeassist.app.ui.components.CardFact
 import com.typeassist.app.ui.components.DangerButton
+import com.typeassist.app.ui.components.GhostButton
 import com.typeassist.app.ui.components.GroupCard
 import com.typeassist.app.ui.components.NoticeCard
 import com.typeassist.app.ui.components.NoticeTone

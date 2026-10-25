@@ -81,7 +81,6 @@ fun HistoryScreen(
             AppTopBar(
                 title = if (tab == 1) "Token usage" else "History",
                 onBack = onBack,
-                onBack = onBack,
                 actions = {
                     // Export hands the tab's data to the share sheet: usage as counters only,
                     // history as the text the user replaced - their data, their choice.
