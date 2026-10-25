@@ -29,12 +29,14 @@ import com.typeassist.app.api.ScreenPrompts
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.HistoryManager
+import com.typeassist.app.data.HistoryStore
 import com.typeassist.app.data.UsageStore
 import com.typeassist.app.data.UsageTracker
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.StreamRecoveryManager
 import com.typeassist.app.data.StreamThrottle
 import com.typeassist.app.ui.ThemePalettes
+import com.typeassist.app.utils.CommandGuard
 import com.typeassist.app.utils.ScreenTextExtractor
 import okhttp3.*
 import java.util.TimeZone
@@ -127,6 +129,19 @@ class MyAccessibilityService : AccessibilityService() {
         val image: PromptImage? = null
     )
 
+    /** Reminders already shown this session, so a refusal is explained once, not on every keystroke. */
+    private val shownRefusals = mutableSetOf<CommandGuard.Refusal>()
+
+    /**
+     * Explains a refused command, but only the first time: a trigger that keeps matching while the
+     * user types would otherwise show the same message over and over.
+     */
+    private fun notifyRefusalOnce(refusal: CommandGuard.Refusal) {
+        if (!shownRefusals.add(refusal)) return
+        Log.d(TAG, "Command refused: $refusal")
+        overlayManager.showToast(CommandGuard.message(refusal))
+    }
+
     // -- In-flight stream --
     private var activeStream: AiStream? = null
     private var activeStreamNode: AccessibilityNodeInfo? = null
@@ -159,6 +174,9 @@ class MyAccessibilityService : AccessibilityService() {
         // Token totals are read back here so the usage tab shows the stored history, not just the
         // requests made since the phone was last restarted.
         UsageTracker.load(UsageStore(this).load())
+        // The command history is read back as well, so the History tab still shows what was there
+        // before the service was restarted.
+        HistoryManager.attachStore(HistoryStore(this))
         reportInterruptedStream()
         Log.d(TAG, "Service Connected")
     }
@@ -286,6 +304,14 @@ class MyAccessibilityService : AccessibilityService() {
             // The user (or another app) really changed the field: stop streaming and put the chip
             // away, then carry on parsing what they typed.
             onUserInterruption()
+
+            // A password field is untouchable: no command runs there, nothing is written to the
+            // history, and no text is ever sent to a provider. Checked before any command is
+            // parsed, so the password cannot leak through a trigger either.
+            if (!CommandGuard.allowsAnyCommand(inputNode.isPassword)) {
+                notifyRefusalOnce(CommandGuard.Refusal.PASSWORD_FIELD)
+                return
+            }
 
             val configJson = configPrefs.getString("config_json", null)
             if (configJson == null) {
@@ -665,6 +691,19 @@ class MyAccessibilityService : AccessibilityService() {
         image: PromptImage? = null,
         render: (String) -> String
     ) {
+        // Every AI request passes through here, so both privacy rules are checked in one place:
+        // a password field, or an app on the user's "never touch this app" list. The offline
+        // tools are not affected by the blocklist - they never leave the phone.
+        val refusal = CommandGuard.refusal(
+            isPassword = node?.isPassword == true,
+            blockedPackages = config.screenContextBlockedPackages,
+            packageName = node?.packageName?.toString()
+        )
+        if (refusal != CommandGuard.Refusal.NONE) {
+            notifyRefusalOnce(refusal)
+            return
+        }
+
         lastCommand = PendingAiCommand(prompt, userText, render, originalFieldText, image)
         overlayManager.showLoading(config)
         overlayManager.hideUndoButton()

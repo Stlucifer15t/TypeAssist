@@ -162,9 +162,13 @@ dependencies {
 
     // Testing
     testImplementation libs.junit.junit
+    // The API clients use Android's org.json; in JVM tests that class is only a stub that throws,
+    // so the real implementation is put on the unit-test classpath instead.
+    testImplementation libs.org.json.json
+    // MockWebServer needs no device, so the API client tests run as plain unit tests.
+    testImplementation libs.squareup.okhttp3.mockwebserver
     androidTestImplementation libs.androidx.test.ext.junit
     androidTestImplementation libs.androidx.test.espresso.espresso.core
-    androidTestImplementation libs.squareup.okhttp3.mockwebserver
     androidTestImplementation platform(libs.androidx.compose.bom)
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     debugImplementation 'androidx.compose.ui:ui-tooling'

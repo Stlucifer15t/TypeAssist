@@ -1,6 +1,5 @@
 package com.typeassist.app.api
 
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.CloudflareConfig
 import com.typeassist.app.data.CustomApiConfig
@@ -10,21 +9,24 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Instrumentation tests for the AI API clients using [MockWebServer].
- * No live backend is required: every request is answered by the mock server enqueued here.
+ * Tests for the AI API clients using [MockWebServer]: no live backend is required, every request is
+ * answered by the mock server enqueued here.
  *
- * The clients deliver results on callbacks, so each test blocks on a [CountDownLatch] until the
- * callback fires.
+ * These run as plain JVM unit tests (not instrumentation tests) because MockWebServer is a normal
+ * Java library and needs no device - which is also why they now run on every pull request instead
+ * of only on a phone.
+ *
+ * The clients deliver their results on callbacks, so each test blocks on a [CountDownLatch] until
+ * the callback fires.
  */
-@RunWith(AndroidJUnit4::class)
 class ApiClientMockWebServerTest {
 
     private lateinit var server: MockWebServer
@@ -47,10 +49,8 @@ class ApiClientMockWebServerTest {
             .setBody("""{"choices":[{"message":{"content":"Hello, world!"}}]}""")
             .setHeader("Content-Type", "application/json"))
 
-        val config = customConfig()
-
         val client = CustomApiClient(OkHttpClient())
-        val result = callClient(client, config)
+        val result = callClient(client, customConfig())
 
         assertEquals("Hello, world!", result)
     }
@@ -65,7 +65,8 @@ class ApiClientMockWebServerTest {
         callClient(client, customConfig())
 
         val recorded = server.takeRequest(5, TimeUnit.SECONDS)
-        assertEquals("Bearer test-key", recorded.getHeader("Authorization"))
+        assertNotNull("The client sent no request", recorded)
+        assertEquals("Bearer test-key", recorded!!.getHeader("Authorization"))
         val sentBody = recorded.body.readUtf8()
         assertTrue(sentBody.contains("\"model\":\"gpt-3.5-turbo\""))
         assertTrue(sentBody.contains("\"messages\""))
@@ -80,7 +81,7 @@ class ApiClientMockWebServerTest {
         val client = CustomApiClient(OkHttpClient())
         callClient(client, customConfig())
 
-        assertEquals("/v1/chat/completions", server.takeRequest().path)
+        assertEquals("/v1/chat/completions", server.takeRequest(5, TimeUnit.SECONDS)?.path)
     }
 
     @Test
@@ -108,6 +109,18 @@ class ApiClientMockWebServerTest {
     }
 
     @Test
+    fun customApiClientHandlesAnEmptyAnswer() {
+        server.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setBody("""{"choices":[{"message":{"content":"   "}}]}"""))
+
+        val client = CustomApiClient(OkHttpClient())
+        val result = callClientExpectFailure(client, customConfig())
+
+        assertTrue(result.contains("empty response"))
+    }
+
+    @Test
     fun geminiApiClientReturnsAnswer() {
         server.enqueue(MockResponse()
             .setResponseCode(200)
@@ -131,7 +144,7 @@ class ApiClientMockWebServerTest {
             .setResponseCode(200)
             .setBody(
                 """{"candidates":[{"content":{"parts":[{"text":"answer"}]}}],""" +
-                """"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":34}}"""
+                    """"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":34}}"""
             ))
 
         val config = createDefaultConfig().copy(
@@ -171,7 +184,7 @@ class ApiClientMockWebServerTest {
             .setResponseCode(200)
             .setBody(
                 """{"result":{"response":"The Cloudflare answer",""" +
-                """"usage":{"prompt_tokens":10,"completion_tokens":5}}}"""
+                    """"usage":{"prompt_tokens":10,"completion_tokens":5}}}"""
             ))
 
         val config = cloudflareConfig()
@@ -195,6 +208,18 @@ class ApiClientMockWebServerTest {
     }
 
     @Test
+    fun cloudflareApiClientHandlesAnEmptyAnswer() {
+        server.enqueue(MockResponse()
+            .setResponseCode(200)
+            .setBody("""{"result":{"response":"   "}}"""))
+
+        val client = CloudflareApiClient(rewritingClient())
+        val message = callClientExpectFailure(client, cloudflareConfig())
+
+        assertTrue(message.contains("empty answer"))
+    }
+
+    @Test
     fun aRateLimitedFirstAttemptIsRetriedOnce() {
         // First answer: 429. Second answer: success. The client retries transient statuses once.
         server.enqueue(MockResponse().setResponseCode(429).setBody("""{"errors":[{"message":"rate limited"}]}"""))
@@ -207,6 +232,18 @@ class ApiClientMockWebServerTest {
 
         assertEquals("after retry", result)
         assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun aBadRequestIsNotRetried() {
+        // A 400 would fail again in exactly the same way, so it is reported straight away.
+        server.enqueue(MockResponse().setResponseCode(400).setBody("""{"error":{"message":"bad request"}}"""))
+
+        val client = CustomApiClient(OkHttpClient())
+        val message = callClientExpectFailure(client, customConfig())
+
+        assertTrue(message.contains("400"))
+        assertEquals(1, server.requestCount)
     }
 
     // ------------------------------------------------------------------

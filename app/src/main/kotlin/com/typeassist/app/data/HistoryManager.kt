@@ -1,5 +1,7 @@
 package com.typeassist.app.data
 
+import com.google.gson.Gson
+
 /**
  * In-memory record of the text Prompt AI replaced, so nothing the user wrote is really gone.
  *
@@ -9,8 +11,10 @@ package com.typeassist.app.data
  * [MAX_ITEMS] entries and [MAX_TOTAL_CHARS] characters, so a long session on a big screen cannot
  * grow the service's memory without bound.
  *
- * Nothing here touches the disk: history lives in the accessibility service's process and is gone
- * when the service is gone.
+ * The entries are written to disk as well (see [HistoryStore]), so the history survives the
+ * accessibility service being restarted - which happens whenever Android reclaims the app, and
+ * used to empty the History tab without warning. The disk copy is only touched when a [HistoryStore]
+ * is attached; without one the manager stays purely in memory, which is what the unit tests use.
  */
 object HistoryManager {
 
@@ -34,8 +38,22 @@ object HistoryManager {
     private val history = mutableListOf<HistoryItem>()
     private var retentionMinutes: Int = DEFAULT_RETENTION_MINUTES
 
+    /** Where the history is written; null while nothing has attached one (the unit tests). */
+    private var store: HistoryStore? = null
+
     /** Replaceable so the retention and size rules can be tested without waiting an hour. */
     internal var clock: () -> Long = { System.currentTimeMillis() }
+
+    private val gson = Gson()
+
+    /** The stored shape: a plain text/timestamp pair, so a damaged entry can be skipped. */
+    private data class StoredItem(
+        val text: String? = null,
+        val timestamp: Long? = null
+    )
+
+    /** Wrapper for the stored JSON, so the file is an object and not a bare array. */
+    private data class Persisted(val items: List<StoredItem> = emptyList())
 
     fun sanitizeRetentionMinutes(minutes: Int): Int =
         if (minutes <= 0) DEFAULT_RETENTION_MINUTES else minutes.coerceIn(MIN_RETENTION_MINUTES, MAX_RETENTION_MINUTES)
@@ -52,6 +70,15 @@ object HistoryManager {
     }
 
     /**
+     * Attaches the place the history is written, and reads back what is already there. Called by
+     * the service when it starts, so the History tab is not empty after a restart.
+     */
+    fun attachStore(store: HistoryStore) {
+        this.store = store
+        load(store.load())
+    }
+
+    /**
      * Records the text a command replaced. [retentionMinutes] comes from the user's settings; an
      * unknown value falls back to the default instead of throwing.
      */
@@ -60,6 +87,7 @@ object HistoryManager {
         this.retentionMinutes = sanitizeRetentionMinutes(retentionMinutes)
         history.add(0, HistoryItem(text, clock()))
         cleanup()
+        store?.save(dump())
     }
 
     fun getHistory(): List<HistoryItem> {
@@ -69,6 +97,7 @@ object HistoryManager {
 
     fun clear() {
         history.clear()
+        store?.clear()
     }
 
     /** Entries currently held — used by the settings screen to show what is being kept. */
@@ -80,6 +109,31 @@ object HistoryManager {
     fun currentRetentionMinutes(): Int = retentionMinutes
 
     fun expirationMs(): Long = retentionMinutes * 60_000L
+
+    /** The history as a JSON string, ready to be written to disk. */
+    fun dump(): String = gson.toJson(Persisted(history.map { StoredItem(it.text, it.timestamp) }))
+
+    /**
+     * Replaces the history with what was read back from disk. Damaged entries are skipped rather
+     * than trusted, and entries that are already past the retention window are dropped right away.
+     */
+    fun load(json: String?) {
+        history.clear()
+        if (json.isNullOrBlank()) return
+        val parsed = try {
+            gson.fromJson(json, Persisted::class.java)?.items.orEmpty()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        parsed.forEach { item ->
+            val text = item.text ?: return@forEach
+            if (text.isBlank()) return@forEach
+            history.add(HistoryItem(text, item.timestamp ?: 0L))
+        }
+        // Newest first, and only what is still inside the retention window.
+        history.sortByDescending { it.timestamp }
+        cleanup()
+    }
 
     private fun cleanup() {
         val now = clock()

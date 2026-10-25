@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.typeassist.app.data.HistoryManager
+import com.typeassist.app.data.HistoryStore
 import com.typeassist.app.ui.MonoFamily
 import com.typeassist.app.ui.Spacing
 import com.typeassist.app.ui.components.AppScaffold
@@ -63,8 +64,11 @@ fun HistoryScreen(
     onBack: () -> Unit
 ) {
     val window = HistoryManager.describeRetention(retentionMinutes)
-    var historyItems by remember { mutableStateOf(HistoryManager.getHistory()) }
     val context = LocalContext.current
+    // The entries are written to disk as they happen, so read them back here: the service may not
+    // be running, and the list must not be empty just because the app was restarted.
+    remember(context) { HistoryManager.attachStore(HistoryStore(context)) }
+    var historyItems by remember { mutableStateOf(HistoryManager.getHistory()) }
     var showClearDialog by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(0) }
 

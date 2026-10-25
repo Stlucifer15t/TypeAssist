@@ -60,6 +60,21 @@ jobs:
               while IFS= read -r line; do echo "::error::$line"; done
           fi
 
+      - name: Run detekt (static analysis)
+        run: |
+          set -o pipefail
+          ./gradlew detekt --stacktrace 2>&1 | tee detekt.log
+
+      - name: Upload detekt report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-report
+          path: |
+            detekt.log
+            app/build/reports/detekt
+          if-no-files-found: warn
+
       - name: Run unit tests
         run: |
           set -o pipefail
@@ -124,7 +139,7 @@ jobs:
         if: failure()
         run: |
           set +e
-          for log in test.log build.log; do
+          for log in detekt.log lint.log test.log build.log; do
             if [ ! -f "$log" ]; then echo "::error::$log was not produced"; continue; fi
             {
               grep -E "^e: |^w: .*never used|FAILURE:|What went wrong|Execution failed|FAILED$|[0-9]+ tests? completed" "$log" | head -8
