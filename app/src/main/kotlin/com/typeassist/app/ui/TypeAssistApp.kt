@@ -53,6 +53,8 @@ import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.LoadingIndicatorStyle
 import com.typeassist.app.data.ModelSelectionPreferences
+import com.typeassist.app.data.SecretStore
+import com.typeassist.app.data.Secrets
 import com.typeassist.app.data.createDefaultConfig
 import com.typeassist.app.data.mergeDuplicateProfiles
 import com.typeassist.app.data.model.GitHubRelease
@@ -211,6 +213,9 @@ fun TypeAssistApp(
     val context = LocalContext.current
     val gson = GsonBuilder().setPrettyPrinting().create()
     val prefs = context.getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE)
+    // Keys are encrypted with a keystore-backed key when they are written, and opened again when
+    // they are read; the in-memory config always holds them in plain text.
+    val secretStore = remember { SecretStore() }
 
     // Determine the start destination: onboarding the first time, Home afterwards.
     val hasSeenOnboarding = prefs.getBoolean("has_seen_onboarding", false)
@@ -248,10 +253,18 @@ fun TypeAssistApp(
                 // Migration: drop duplicate saved profiles / model history from older configs,
                 // and persist the cleaned config so the duplicates stay gone.
                 val cleanedConfig = cleanConfig(loadedConfig)
-                if (cleanedConfig !== loadedConfig) {
-                    prefs.edit().putString("config_json", gson.toJson(cleanedConfig)).apply()
+                // The keys on disk are encrypted (SecretStore); hand the app the plain values.
+                val plainConfig = Secrets.decryptConfig(cleanedConfig, secretStore::decrypt)
+                // A config written by an older version still carries plain keys: persist the
+                // encrypted form now, so the migration happens once, right here. The dedupe
+                // migration is persisted in the same write.
+                if (cleanedConfig !== loadedConfig || Secrets.hasPlainSecrets(cleanedConfig)) {
+                    prefs.edit().putString(
+                        "config_json",
+                        gson.toJson(Secrets.encryptConfig(plainConfig, secretStore::encrypt))
+                    ).apply()
                 }
-                cleanedConfig
+                plainConfig
             } else createDefaultConfig()
         } catch (e: Exception) {
             createDefaultConfig()
@@ -261,7 +274,10 @@ fun TypeAssistApp(
     fun saveConfig(newConfig: AppConfig) {
         val cleaned = cleanConfig(newConfig)
         config = cleaned
-        prefs.edit().putString("config_json", gson.toJson(cleaned)).apply()
+        prefs.edit().putString(
+            "config_json",
+            gson.toJson(Secrets.encryptConfig(cleaned, secretStore::encrypt))
+        ).apply()
     }
 
     val navController = rememberNavController()

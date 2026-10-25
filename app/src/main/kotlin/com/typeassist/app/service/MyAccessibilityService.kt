@@ -30,6 +30,8 @@ import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.ConfigMigrations
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.HistoryStore
+import com.typeassist.app.data.SecretStore
+import com.typeassist.app.data.Secrets
 import com.typeassist.app.data.UsageStore
 import com.typeassist.app.data.UsageTracker
 import com.typeassist.app.data.LoadingIndicatorStyle
@@ -97,7 +99,11 @@ class MyAccessibilityService : AccessibilityService() {
     private val configPrefs by lazy { getSharedPreferences("GeminiConfig", Context.MODE_PRIVATE) }
 
     /** Tracks in-flight requests across process death, so a crash mid-answer is reported. */
+    /** Tracks in-flight requests across process death, so a crash mid-answer is reported. */
     private val streamRecovery by lazy { StreamRecoveryManager(configPrefs) }
+
+    /** Opens the encrypted API keys the app wrote to the settings file. */
+    private val secretStore = SecretStore()
     private val geminiApiClient = GeminiApiClient(client)
     private val cloudflareApiClient = CloudflareApiClient(client)
     private val customApiClient = CustomApiClient(client)
@@ -321,9 +327,13 @@ class MyAccessibilityService : AccessibilityService() {
 
             try {
                 // Gson skips constructors, so fields that did not exist when the config was saved
-                // arrive as zero values. Restore their defaults before anything reads them.
-                val config = ConfigMigrations.apply(
-                    LoadingIndicatorStyle.sanitize(gson.fromJson(configJson, AppConfig::class.java))
+                // arrive as zero values. Restore their defaults before anything reads them. The
+                // keys on disk are encrypted; open them so the providers see the real values.
+                val config = Secrets.decryptConfig(
+                    ConfigMigrations.apply(
+                        LoadingIndicatorStyle.sanitize(gson.fromJson(configJson, AppConfig::class.java))
+                    ),
+                    secretStore::decrypt
                 )
                 
                 // Migration: Convert old single content to contents list
@@ -441,7 +451,10 @@ class MyAccessibilityService : AccessibilityService() {
                             } else {
                                 config.snippets.add(com.typeassist.app.data.Snippet(newTrigger, contents = mutableListOf(newContent)))
                             }
-                            configPrefs.edit().putString("config_json", gson.toJson(config)).apply()
+                            configPrefs.edit().putString(
+                                "config_json",
+                                gson.toJson(Secrets.encryptConfig(config, secretStore::encrypt))
+                            ).apply()
                             val cleanText = currentText.replace(fullMatch, newContent)
                             pasteText(inputNode, cleanText)
                             overlayManager.showToast("Snippet '$newTrigger' saved!")

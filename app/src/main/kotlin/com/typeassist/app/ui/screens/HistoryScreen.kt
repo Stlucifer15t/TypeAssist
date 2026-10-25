@@ -67,8 +67,10 @@ fun HistoryScreen(
     val context = LocalContext.current
     // The entries are written to disk as they happen, so read them back here: the service may not
     // be running, and the list must not be empty just because the app was restarted.
-    remember(context) { HistoryManager.attachStore(HistoryStore(context)) }
-    var historyItems by remember { mutableStateOf(HistoryManager.getHistory()) }
+    var historyItems by remember(context) {
+        HistoryManager.attachStore(HistoryStore(context))
+        mutableStateOf(HistoryManager.getHistory())
+    }
     var showClearDialog by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(0) }
 
