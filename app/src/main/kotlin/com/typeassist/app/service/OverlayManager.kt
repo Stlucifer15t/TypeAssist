@@ -177,16 +177,6 @@ class OverlayManager(private val context: Context) {
         }
     }
 
-    private fun dotWithShadow(color: Int, withShadow: Boolean = true): View {
-        return View(context).apply {
-            background = circleDrawable(color)
-            if (withShadow) {
-                elevation = dpF(3f)
-            }
-        }
-    }
-
-    // No background - immersive, just floating indicator
     private fun createClassicView(): View {
         val container = FrameLayout(context).apply {
             setPadding(sdp(8), sdp(8), sdp(8), sdp(8))

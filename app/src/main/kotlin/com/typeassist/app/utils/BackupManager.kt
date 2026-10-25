@@ -94,12 +94,11 @@ object BackupManager {
      */
     fun importBackup(input: InputStream, password: String?): Pair<AppConfig?, Boolean> {
         val bytes = input.readBytes()
-        if (bytes.size < 5) throw IllegalArgumentException("Invalid file format")
-        
+        require(bytes.size >= 7) { "Invalid file format" }
+
         val header = String(bytes.copyOfRange(0, 5), StandardCharsets.UTF_8)
-        if (header != MAGIC_HEADER) throw IllegalArgumentException("Not a Prompt AI backup file")
-        
-        val version = bytes[5] // currently unused, for future compat
+        require(header == MAGIC_HEADER) { "Not a Prompt AI backup file" }
+
         val flag = bytes[6]
         
         var payloadOffset = 7

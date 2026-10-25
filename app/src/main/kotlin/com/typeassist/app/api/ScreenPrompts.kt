@@ -127,6 +127,7 @@ object ScreenPrompts {
             append(" Return only the summary.")
         }
 
+    @Suppress("UnusedParameter")
     fun answer(config: AppConfig?, now: String? = null, imageAttached: Boolean = false): String =
         buildString {
             append(

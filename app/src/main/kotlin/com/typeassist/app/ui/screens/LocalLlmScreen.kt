@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -32,12 +34,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import com.typeassist.app.api.HttpClients
+import com.typeassist.app.api.ModelDownloader
 import com.typeassist.app.data.AppConfig
 import com.typeassist.app.data.isReasoningModel
 import com.typeassist.app.ui.MonoFamily
 import com.typeassist.app.ui.Spacing
 import com.typeassist.app.ui.components.AppCard
 import com.typeassist.app.ui.components.AppScaffold
+import com.typeassist.app.ui.components.AppTextField
 import com.typeassist.app.ui.components.AppTopBar
 import com.typeassist.app.ui.components.CardFact
 import com.typeassist.app.ui.components.DangerButton
@@ -83,6 +89,14 @@ fun LocalLlmScreen(
     var cachedSize by remember(modelPath) {
         mutableLongStateOf(if (cacheFile.exists()) cacheFile.length() else 0L)
     }
+
+    // -- In-app model download --
+    val downloader = remember { ModelDownloader(HttpClients.shared()) }
+    var downloadUrl by remember { mutableStateOf("") }
+    var downloading by remember { mutableStateOf(false) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    var downloadedBytes by remember { mutableLongStateOf(0L) }
+    var totalBytes by remember { mutableLongStateOf(-1L) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -371,13 +385,107 @@ fun LocalLlmScreen(
             item {
                 AppCard {
                     Text(
-                        text = "Download a GGUF model (for example Qwen2-0.5B-Instruct-GGUF) from " +
-                            "Hugging Face, keep the file on the device, then select it above. Prompt AI " +
-                            "copies it into private app storage the first time it is used, which is what " +
-                            "the cache figure refers to.",
+                        text = "Download a GGUF model straight into the app by pasting its link, or " +
+                            "download it yourself (for example Qwen2-0.5B-Instruct-GGUF from Hugging " +
+                            "Face) and select it above. Either way Prompt AI uses the private app " +
+                            "storage copy, which is what the cache figure refers to.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(Modifier.height(Spacing.md))
+
+                    // -- Download from a direct link --
+                    val urlHint = when {
+                        downloadError != null -> downloadError
+                        downloadUrl.isNotBlank() && !downloader.looksLikeModelUrl(downloadUrl) ->
+                            "That link does not end in .gguf — it may still work if it redirects to the file."
+                        else -> null
+                    }
+                    AppTextField(
+                        value = downloadUrl,
+                        onValueChange = { downloadUrl = it; downloadError = null },
+                        label = "Model link",
+                        placeholder = "https://huggingface.co/…/resolve/main/model.gguf",
+                        supporting = urlHint,
+                        isError = downloadError != null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                    if (downloading) {
+                        val percent = if (totalBytes > 0) {
+                            ((downloadedBytes * 100) / totalBytes).toInt().coerceIn(0, 100)
+                        } else -1
+                        Text(
+                            text = if (totalBytes > 0) {
+                                "${formatFileSize(downloadedBytes)} of ${formatFileSize(totalBytes)} ($percent%)"
+                            } else {
+                                "${formatFileSize(downloadedBytes)} downloaded"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(Spacing.xs))
+                        LinearProgressIndicator(
+                            progress = {
+                                if (totalBytes > 0) (downloadedBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        GhostButton(text = "Cancel download", onClick = {
+                            downloader.cancel()
+                            downloading = false
+                        })
+                    } else {
+                        PrimaryButton(
+                            text = "Download model",
+                            onClick = {
+                                if (downloadUrl.isBlank()) {
+                                    downloadError = "Paste a link to a .gguf file first."
+                                } else {
+                                    downloading = true
+                                    downloadedBytes = 0L
+                                    totalBytes = -1L
+                                    downloader.download(
+                                        url = downloadUrl,
+                                        destination = cacheFile,
+                                        onProgress = { done, total ->
+                                            downloadedBytes = done
+                                            totalBytes = total
+                                        },
+                                        onFinished = { result ->
+                                            downloading = false
+                                            result.fold(
+                                                onSuccess = { file ->
+                                                    modelPath = file.absolutePath
+                                                    cachedSize = file.length()
+                                                    onSave(
+                                                        config.copy(
+                                                            localLlmConfig = config.localLlmConfig.copy(
+                                                                modelPath = file.absolutePath
+                                                            )
+                                                        )
+                                                    )
+                                                    Toast.makeText(
+                                                        context,
+                                                        "Model downloaded and ready",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                },
+                                                onFailure = { error ->
+                                                    downloadError = error.message ?: "The download failed."
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+                            },
+                            enabled = downloadUrl.isNotBlank()
+                        )
+                    }
+                    if (downloadError != null) {
+                        Spacer(Modifier.height(Spacing.xs))
+                    }
                     Spacer(Modifier.height(Spacing.md))
                     DangerButton(
                         text = "Clear model cache",

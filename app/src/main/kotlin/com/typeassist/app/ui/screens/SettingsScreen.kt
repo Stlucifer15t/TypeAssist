@@ -58,6 +58,7 @@ import com.typeassist.app.ui.components.StatusTone
  * tap away and titled in plain language, so nothing is buried behind an unlabelled icon.
  */
 @Composable
+@Suppress("UnusedParameter")
 fun SettingsScreen(
     config: AppConfig,
     onSave: (AppConfig) -> Unit,

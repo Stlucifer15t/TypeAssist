@@ -131,7 +131,7 @@ object UtilityBelt {
                 result.toLong().toString()
             } else {
                 // Format to a reasonable number of decimal places
-                String.format("%.4f", result).trimEnd('0').trimEnd('.')
+                String.format(java.util.Locale.US, "%.4f", result).trimEnd('0').trimEnd('.')
             }
         } catch (e: Exception) {
             "Error"

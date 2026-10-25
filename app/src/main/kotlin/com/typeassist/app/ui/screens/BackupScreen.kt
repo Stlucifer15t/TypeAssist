@@ -107,7 +107,7 @@ fun BackupScreen(
             try {
                 val bytes = BackupManager.exportBackup(config, backupPassword.takeIf { useEncryption })
                 context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                    ?: throw IllegalStateException("The chosen location could not be written to.")
+                    ?: error("The chosen location could not be written to.")
                 statusMessage = "Backup saved. Keep the file somewhere you can reach it later."
                 statusIsError = false
             } catch (e: Exception) {

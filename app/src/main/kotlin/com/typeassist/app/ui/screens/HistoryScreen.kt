@@ -3,6 +3,7 @@ package com.typeassist.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.typeassist.app.data.DataExporter
 import com.typeassist.app.data.HistoryManager
 import com.typeassist.app.data.HistoryStore
 import com.typeassist.app.ui.MonoFamily
@@ -79,7 +81,20 @@ fun HistoryScreen(
             AppTopBar(
                 title = if (tab == 1) "Token usage" else "History",
                 onBack = onBack,
+                onBack = onBack,
                 actions = {
+                    // Export hands the tab's data to the share sheet: usage as counters only,
+                    // history as the text the user replaced - their data, their choice.
+                    if (tab == 0 && historyItems.isNotEmpty()) {
+                        GhostButton(text = "Export", onClick = {
+                            shareCsv(context, "Share history as CSV", DataExporter.historyCsv())
+                        })
+                    }
+                    if (tab == 1) {
+                        GhostButton(text = "Export", onClick = {
+                            shareCsv(context, "Share token usage as CSV", DataExporter.usageCsv())
+                        })
+                    }
                     if (tab == 0 && historyItems.isNotEmpty()) {
                         GhostButton(text = "Clear", onClick = { showClearDialog = true })
                     }
@@ -180,6 +195,20 @@ fun HistoryScreen(
             },
             onDismiss = { showClearDialog = false }
         )
+    }
+}
+
+/** Hands a CSV to the share sheet, so the export lands wherever the user wants it. */
+private fun shareCsv(context: Context, chooserTitle: String, csv: String) {
+    try {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Prompt AI export")
+            putExtra(Intent.EXTRA_TEXT, csv)
+        }
+        context.startActivity(Intent.createChooser(intent, chooserTitle))
+    } catch (e: Exception) {
+        Toast.makeText(context, "Could not open the share sheet: ${e.message}", Toast.LENGTH_SHORT).show()
     }
 }
 

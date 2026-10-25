@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
         val updatePreferences = getSharedPreferences("UpdateInfo", Context.MODE_PRIVATE)
         showVersionAnnouncement = updatePreferences.getInt("announced_app_version_code", 0) < BuildConfig.VERSION_CODE
 
-        updateRepository = UpdateRepository(this)
+        updateRepository = UpdateRepository()
 
         if (BuildConfig.SHOW_UPDATES) {
             loadCachedUpdateInfo()

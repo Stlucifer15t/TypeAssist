@@ -7,7 +7,7 @@ import com.typeassist.app.data.network.GitHubApiService
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-class UpdateRepository(context: Context) {
+class UpdateRepository {
 
     companion object {
         const val RELEASE_OWNER = "Stlucifer15t"

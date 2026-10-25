@@ -1216,7 +1216,7 @@ class MyAccessibilityService : AccessibilityService() {
         for (i in contentStartIndex until text.length) {
             when (text[i]) {
                 '(' -> balance++
-                ')' -> { if (balance == 0) { endIndex = i; break }; balance-- }
+                ')' -> if (balance == 0) { endIndex = i; break } else balance--
             }
         }
         if (endIndex != -1) return Pair(text.substring(startIndex, endIndex + 1), text.substring(contentStartIndex, endIndex))

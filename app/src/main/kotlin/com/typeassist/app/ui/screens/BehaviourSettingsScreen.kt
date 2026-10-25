@@ -541,7 +541,7 @@ fun BehaviourSettingsScreen(
                                 onClick = {
                                     checkingForUpdate = true
                                     scope.launch {
-                                        val result = UpdateRepository(context).checkForUpdate()
+                                        val result = UpdateRepository().checkForUpdate()
                                         checkingForUpdate = false
                                         result.onSuccess { release ->
                                             if (release != null) {

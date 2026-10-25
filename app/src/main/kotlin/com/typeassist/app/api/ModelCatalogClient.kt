@@ -48,7 +48,7 @@ class ModelCatalogClient(private val client: OkHttpClient = HttpClients.catalog(
     }
 
     suspend fun fetchGeminiModels(apiKey: String, force: Boolean = false): List<String> {
-        if (apiKey.isBlank()) throw IllegalArgumentException("Enter your Gemini API key first.")
+        require(apiKey.isNotBlank()) { "Enter your Gemini API key first." }
         val cacheKey = "gemini"
         if (!force) cached(cacheKey)?.let { return it }
         val url = "https://generativelanguage.googleapis.com/v1beta/models".toHttpUrlOrNull()
@@ -93,8 +93,8 @@ class ModelCatalogClient(private val client: OkHttpClient = HttpClients.catalog(
         fun modelsEndpoint(baseUrl: String): HttpUrl {
             val parsed = baseUrl.trim().toHttpUrlOrNull()
                 ?: throw IllegalArgumentException("Enter a valid Base URL beginning with http:// or https://.")
-            if (parsed.scheme != "https" && parsed.scheme != "http") {
-                throw IllegalArgumentException("The Base URL must use HTTP or HTTPS.")
+            require(parsed.scheme == "https" || parsed.scheme == "http") {
+                "The Base URL must use HTTP or HTTPS."
             }
 
             val segments = parsed.encodedPathSegments.filter { it.isNotBlank() }.toMutableList()
