@@ -64,7 +64,7 @@ class DataExporterTest {
         assertEquals(3, csv.lines().size)
         assertTrue(csv.startsWith("timestamp,text"))
         assertTrue(csv.contains("\"second entry\""))
-        assertTrue(csv.contains("5000,\"first entry\""))
+        assertTrue(csv.contains("\"5000\",\"first entry\""))
     }
 
     @Test

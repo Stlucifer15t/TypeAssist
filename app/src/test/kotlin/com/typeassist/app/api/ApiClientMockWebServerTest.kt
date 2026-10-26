@@ -323,7 +323,7 @@ class ApiClientMockWebServerTest {
      */
     private fun rewritingClient(): OkHttpClient {
         return OkHttpClient.Builder()
-            .addNetworkInterceptor { chain ->
+            .addInterceptor { chain ->
                 val original = chain.request()
                 val rewritten = original.newBuilder()
                     .url(server.url(original.url.encodedPath))
