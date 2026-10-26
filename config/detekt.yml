@@ -84,14 +84,10 @@ style:
   UnusedPrivateMember:
     ignoreAnnotated:
       - 'Preview'
-
-serialization:
-  SerialVersionUIDInSerializableClass:
-    # These classes are serialized by Gson, which ignores serialVersionUID.
-    active: false
-
-unused:
   UnusedPrivateProperty:
     active: true
   UnusedParameter:
     active: true
+  SerialVersionUIDInSerializableClass:
+    # These classes are serialized by Gson, which ignores serialVersionUID.
+    active: false
