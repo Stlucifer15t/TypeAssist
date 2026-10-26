@@ -200,6 +200,9 @@ class ApiClientMockWebServerTest {
         server.enqueue(MockResponse()
             .setResponseCode(500)
             .setBody("""{"errors":[{"message":"Something went wrong"}]}"""))
+        server.enqueue(MockResponse()
+            .setResponseCode(500)
+            .setBody("""{"errors":[{"message":"Something went wrong"}]}"""))
 
         val client = CloudflareApiClient(rewritingClient())
         val message = callClientExpectFailure(client, cloudflareConfig())
