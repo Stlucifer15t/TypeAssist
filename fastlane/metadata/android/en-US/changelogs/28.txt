@@ -1,0 +1,8 @@
+Version 4.9.2
+
+• Your API keys are now encrypted on disk with a hardware-backed key, so a backup tool or a file manager cannot read them.
+• Prompt AI never sends text from password fields, and it stays silent in apps you put on the blocklist.
+• The History tab survives the app being restarted — it used to go blank.
+• Download a local AI model straight from the app: paste a Hugging Face link and watch the progress.
+• Export your token usage or your history as a CSV and share it wherever you like.
+• Smaller APK surface: version catalog cleanup and tighter ProGuard keep rules.
