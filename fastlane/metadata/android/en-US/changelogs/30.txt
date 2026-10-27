@@ -1,0 +1,3 @@
+Version 4.9.4
+
+• Triggers are instant again — no extra space needed before the command, and no more waiting after typing it.
