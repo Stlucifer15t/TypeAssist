@@ -56,6 +56,16 @@ class MyAccessibilityService : AccessibilityService() {
         }
 
         /**
+         * How long the service waits after the last keystroke before running a trailing trigger.
+         *
+         * Short on purpose: long enough for a keyboard to finish committing the word being typed
+         * (some IMEs keep the text in a composing state until the next key), short enough that the
+         * command feels like it started the moment the trigger was typed. A fixed value rather than
+         * a setting, because a stale saved value must not be able to slow every command down.
+         */
+        private const val TRIGGER_DELAY_MS = 120L
+
+        /**
          * How long after we write text ourselves an identical text-changed event is still treated
          * as our own echo rather than the user typing.
          */
@@ -104,6 +114,55 @@ class MyAccessibilityService : AccessibilityService() {
 
     /** Opens the encrypted API keys the app wrote to the settings file. */
     private val secretStore = SecretStore()
+
+    /**
+     * The parsed, migrated, decrypted config from [cachedConfigJson].
+     *
+     * Building a config is expensive: Gson walks every trigger and snippet, and the API keys have
+     * to be opened through the Android keystore, which is a hardware round-trip each. Doing that
+     * for every keystroke is what made commands feel like they took seconds to start. The raw JSON
+     * is compared instead - SharedPreferences already keeps it in memory - so the work happens
+     * once per config change rather than once per character typed.
+     */
+    @Volatile private var cachedConfigJson: String? = null
+    @Volatile private var cachedConfig: AppConfig? = null
+
+    /** Returns the ready-to-use config for [json], rebuilding it only when the stored JSON changed. */
+    private fun configFor(json: String): AppConfig {
+        cachedConfig?.let { cached -> if (cachedConfigJson == json) return cached }
+
+        // Gson skips constructors, so fields that did not exist when the config was saved arrive as
+        // zero values. Restore their defaults before anything reads them. The keys on disk are
+        // encrypted, so they are opened here - once per change, not once per keystroke.
+        val config = Secrets.decryptConfig(
+            ConfigMigrations.apply(
+                LoadingIndicatorStyle.sanitize(gson.fromJson(json, AppConfig::class.java))
+            ),
+            secretStore::decrypt
+        )
+
+        // Migration: convert an old single snippet content into the contents list.
+        config.snippets?.forEach { snippet ->
+            if (snippet.contents == null) snippet.contents = mutableListOf()
+            if (snippet.content != null && snippet.content.isNotEmpty()) {
+                if (!snippet.contents.contains(snippet.content)) {
+                    snippet.contents.add(snippet.content)
+                }
+                snippet.content = ""
+            }
+        }
+
+        cachedConfigJson = json
+        cachedConfig = config
+        return config
+    }
+
+    /** Drops the cached config so the next event reads the freshly saved one. */
+    private fun invalidateConfigCache() {
+        cachedConfigJson = null
+        cachedConfig = null
+    }
+
     private val geminiApiClient = GeminiApiClient(client)
     private val cloudflareApiClient = CloudflareApiClient(client)
     private val customApiClient = CustomApiClient(client)
@@ -326,27 +385,8 @@ class MyAccessibilityService : AccessibilityService() {
             }
 
             try {
-                // Gson skips constructors, so fields that did not exist when the config was saved
-                // arrive as zero values. Restore their defaults before anything reads them. The
-                // keys on disk are encrypted; open them so the providers see the real values.
-                val config = Secrets.decryptConfig(
-                    ConfigMigrations.apply(
-                        LoadingIndicatorStyle.sanitize(gson.fromJson(configJson, AppConfig::class.java))
-                    ),
-                    secretStore::decrypt
-                )
-                
-                // Migration: Convert old single content to contents list
-                config.snippets?.forEach { snippet ->
-                    if (snippet.contents == null) snippet.contents = mutableListOf()
-                    if (snippet.content != null && snippet.content.isNotEmpty()) {
-                        if (!snippet.contents.contains(snippet.content)) {
-                            snippet.contents.add(snippet.content)
-                        }
-                        snippet.content = ""
-                    }
-                }
-                
+                val config = configFor(configJson)
+
                 if (!config.isAppEnabled) {
                     return
                 }
@@ -455,6 +495,8 @@ class MyAccessibilityService : AccessibilityService() {
                                 "config_json",
                                 gson.toJson(Secrets.encryptConfig(config, secretStore::encrypt))
                             ).apply()
+                            // The stored JSON changed, so the cached copy is stale.
+                            invalidateConfigCache()
                             val cleanText = currentText.replace(fullMatch, newContent)
                             pasteText(inputNode, cleanText)
                             overlayManager.showToast("Snippet '$newTrigger' saved!")
@@ -650,7 +692,7 @@ class MyAccessibilityService : AccessibilityService() {
                                 }
                             }
                             pendingTriggerRunnable = runnable
-                            debounceHandler.postDelayed(runnable, 150L)
+                            debounceHandler.postDelayed(runnable, TRIGGER_DELAY_MS)
                         }
                         return
                     }
