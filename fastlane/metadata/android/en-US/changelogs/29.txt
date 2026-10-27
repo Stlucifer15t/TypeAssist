@@ -1,0 +1,4 @@
+Version 4.9.3
+
+• Triggers feel instant again — no extra space needed, and the delay after typing a command is much shorter.
+• Suffix handling trims extra spaces so the result doesn't get double spaces.
