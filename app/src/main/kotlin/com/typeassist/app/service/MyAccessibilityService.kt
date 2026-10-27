@@ -641,22 +641,17 @@ class MyAccessibilityService : AccessibilityService() {
                             pendingTriggerRunnable?.let { debounceHandler.removeCallbacks(it) }
                             val runnable = Runnable {
                                 if (!inputNode.refresh()) return@Runnable
-                                // Same text .undo restores: what the user wrote before the trigger.
                                 originalTextCache = textToProcess
                                 lastNode = inputNode
                                 undoCacheTimestamp = System.currentTimeMillis()
                                 if (config.isHistoryEnabled) HistoryManager.add(originalTextCache, config.historyRetentionMinutes)
 
                                 executeAiCommand(config, prompt, textToProcess, inputNode, textToProcess) { aiText ->
-                                    // Keep whatever the user wrote after the trigger.
                                     if (suffix.isNotEmpty()) aiText + " " + suffix else aiText
                                 }
                             }
                             pendingTriggerRunnable = runnable
-                            // Fire quickly so it feels instant; the debounce only guards against
-                            // intermediate keystrokes while the user is still typing.
-                            val delay = if (currentText.trimEnd().endsWith(pattern)) 150L else config.triggerDebounceMs
-                            debounceHandler.postDelayed(runnable, delay)
+                            debounceHandler.post(runnable)
                         }
                         return
                     }
@@ -1154,13 +1149,9 @@ class MyAccessibilityService : AccessibilityService() {
 
     private fun findTriggerIndex(text: String, trigger: String, allowAnywhere: Boolean, ignoreWhitespace: Boolean): Int {
         if (!allowAnywhere) {
-            // Trim trailing whitespace so "hello .ta " still triggers — the user often hits space
-            // after the trigger out of habit, and the trigger should not be lost because of it.
             val trimmedEnd = text.trimEnd()
             if (!trimmedEnd.endsWith(trigger)) return -1
-            val triggerStartIndex = trimmedEnd.length - trigger.length
-            if (!ignoreWhitespace && triggerStartIndex > 0 && !trimmedEnd[triggerStartIndex - 1].isWhitespace()) return -1
-            return triggerStartIndex
+            return trimmedEnd.length - trigger.length
         }
 
         var idx = text.lastIndexOf(trigger)
