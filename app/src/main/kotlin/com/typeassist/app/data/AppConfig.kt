@@ -15,7 +15,7 @@ data class AppConfig(
     var savedGeminiConfigs: MutableList<SavedGeminiConfig> = mutableListOf(),
     var savedCloudflareConfigs: MutableList<CloudflareConfig> = mutableListOf(),
     var modelPreferences: MutableList<ModelSelectionPreference> = mutableListOf(),
-    var triggerDebounceMs: Long = 400L,
+    var triggerDebounceMs: Long = 150L,
     var generationConfig: GenConfig = GenConfig(),
     var triggers: MutableList<Trigger> = mutableListOf(),
     var inlineCommands: MutableList<InlineCommand> = mutableListOf(),
@@ -209,7 +209,7 @@ fun createDefaultConfig(): AppConfig {
         savedGeminiConfigs = mutableListOf(),
         savedCloudflareConfigs = mutableListOf(),
         modelPreferences = mutableListOf(),
-        triggerDebounceMs = 400L,
+        triggerDebounceMs = 150L,
         generationConfig = GenerationSettings.defaults(),
         triggers = mutableListOf(
             Trigger(".ta", "Give only the most relevant and complete answer to the query. Do not explain, do not add introductions, disclaimers, or extra text. Output only the answer."),

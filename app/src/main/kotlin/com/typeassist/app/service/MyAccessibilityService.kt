@@ -631,12 +631,14 @@ class MyAccessibilityService : AccessibilityService() {
                     if (triggerIndex != -1) {
                         val textToProcess = currentText.substring(0, triggerIndex).trim()
                         Log.d(TAG, "Trigger Match: $pattern | Input Text: $textToProcess")
-                        
+
                         val suffix = if (currentText.length > triggerIndex + pattern.length) {
-                             currentText.substring(triggerIndex + pattern.length)
+                             currentText.substring(triggerIndex + pattern.length).trim()
                         } else { "" }
-                        
+
                         if (textToProcess.length > 1) {
+                            // Cancel any pending trigger so only the latest one fires.
+                            pendingTriggerRunnable?.let { debounceHandler.removeCallbacks(it) }
                             val runnable = Runnable {
                                 if (!inputNode.refresh()) return@Runnable
                                 // Same text .undo restores: what the user wrote before the trigger.
@@ -647,11 +649,14 @@ class MyAccessibilityService : AccessibilityService() {
 
                                 executeAiCommand(config, prompt, textToProcess, inputNode, textToProcess) { aiText ->
                                     // Keep whatever the user wrote after the trigger.
-                                    aiText + suffix
+                                    if (suffix.isNotEmpty()) aiText + " " + suffix else aiText
                                 }
                             }
                             pendingTriggerRunnable = runnable
-                            debounceHandler.postDelayed(runnable, config.triggerDebounceMs)
+                            // Fire quickly so it feels instant; the debounce only guards against
+                            // intermediate keystrokes while the user is still typing.
+                            val delay = if (currentText.trimEnd().endsWith(pattern)) 150L else config.triggerDebounceMs
+                            debounceHandler.postDelayed(runnable, delay)
                         }
                         return
                     }
@@ -1149,9 +1154,12 @@ class MyAccessibilityService : AccessibilityService() {
 
     private fun findTriggerIndex(text: String, trigger: String, allowAnywhere: Boolean, ignoreWhitespace: Boolean): Int {
         if (!allowAnywhere) {
-            if (!text.endsWith(trigger)) return -1
-            val triggerStartIndex = text.length - trigger.length
-            if (!ignoreWhitespace && triggerStartIndex > 0 && !text[triggerStartIndex - 1].isWhitespace()) return -1
+            // Trim trailing whitespace so "hello .ta " still triggers — the user often hits space
+            // after the trigger out of habit, and the trigger should not be lost because of it.
+            val trimmedEnd = text.trimEnd()
+            if (!trimmedEnd.endsWith(trigger)) return -1
+            val triggerStartIndex = trimmedEnd.length - trigger.length
+            if (!ignoreWhitespace && triggerStartIndex > 0 && !trimmedEnd[triggerStartIndex - 1].isWhitespace()) return -1
             return triggerStartIndex
         }
 
@@ -1160,9 +1168,9 @@ class MyAccessibilityService : AccessibilityService() {
             val startOk = ignoreWhitespace || (idx == 0) || text[idx - 1].isWhitespace()
             val endIdx = idx + trigger.length
             val endOk = (endIdx == text.length) || text[endIdx].isWhitespace()
-            
+
             if (startOk && endOk) return idx
-            
+
             idx = text.lastIndexOf(trigger, idx - 1)
         }
         return -1
