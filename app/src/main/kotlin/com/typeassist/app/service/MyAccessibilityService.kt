@@ -637,7 +637,6 @@ class MyAccessibilityService : AccessibilityService() {
                         } else { "" }
 
                         if (textToProcess.length > 1) {
-                            // Cancel any pending trigger so only the latest one fires.
                             pendingTriggerRunnable?.let { debounceHandler.removeCallbacks(it) }
                             val runnable = Runnable {
                                 if (!inputNode.refresh()) return@Runnable
@@ -651,7 +650,7 @@ class MyAccessibilityService : AccessibilityService() {
                                 }
                             }
                             pendingTriggerRunnable = runnable
-                            debounceHandler.post(runnable)
+                            debounceHandler.postDelayed(runnable, 150L)
                         }
                         return
                     }
