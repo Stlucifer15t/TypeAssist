@@ -1,0 +1,5 @@
+Version 4.9.6
+
+• Fixed the multi-second wait before a command starts. Since 4.9.2 the app re-opened your encrypted API keys on every single keystroke, which is what made ".go" sit for seconds. The settings are now read and unlocked once per change, so a command starts immediately again.
+• The trigger delay is now a fixed short value, so an old saved timing setting can no longer slow commands down.
+• Commands work without needing a space before or after them.
