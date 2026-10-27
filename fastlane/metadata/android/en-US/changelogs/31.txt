@@ -1,0 +1,3 @@
+Version 4.9.5
+
+• Fixed trigger timing — ".go" and other commands now work without needing a trailing space, and activate quickly again.
